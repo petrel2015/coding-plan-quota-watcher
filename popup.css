@@ -26,14 +26,6 @@ body {
   gap: 8px;
 }
 
-.auto-timer {
-  font-size: 11px;
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-  min-width: 28px;
-  text-align: right;
-}
-
 #refresh-btn {
   padding: 4px 12px;
   font-size: 12px;
