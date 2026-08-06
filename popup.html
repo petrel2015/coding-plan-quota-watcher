@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Coding Plan Quota Watcher</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <h1>Coding Plan 用量监控</h1>
+    <div class="header-right">
+      <span id="auto-timer" class="auto-timer">10s</span>
+      <button id="dashboard-btn">打开面板</button>
+      <button id="refresh-btn">刷新</button>
+    </div>
+  </div>
+  <div id="sources">
+    <div class="empty">加载中...</div>
+  </div>
+  <script src="render.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
