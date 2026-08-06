@@ -30,10 +30,16 @@ async function renderAll() {
 
   for (const inst of enabled) {
     const data = keys[`data_${inst.id}`];
-    const card = renderSource(inst, data);
+    const card = renderSourceCard(inst, data);
     container.appendChild(card);
+    bindCardRefresh(inst.id);
     startCardTimer(inst.id);
   }
+}
+
+function bindCardRefresh(instanceId) {
+  const btn = document.getElementById(`refresh-card-${instanceId}`);
+  if (btn) btn.addEventListener("click", () => refreshCard(instanceId));
 }
 
 function startCardTimer(instanceId) {
@@ -92,76 +98,8 @@ async function updateCard(instanceId) {
 
   const oldCard = document.getElementById(`card-${instanceId}`);
   if (oldCard) {
-    const newCard = renderSource(inst, data);
+    const newCard = renderSourceCard(inst, data);
+    bindCardRefresh(instanceId);
     oldCard.replaceWith(newCard);
   }
-}
-
-function renderSource(inst, data) {
-  const card = document.createElement("div");
-  card.className = "source-card";
-  card.id = `card-${inst.id}`;
-
-  const header = document.createElement("div");
-  header.className = "source-header";
-  header.innerHTML = `
-    <span class="source-name">${escapeHtml(inst.name)}</span>
-    <div class="card-controls">
-      <span id="timer-${inst.id}" class="card-timer">${AUTO_REFRESH_SEC}s</span>
-      <button id="refresh-card-${inst.id}" class="card-refresh-btn">刷新</button>
-    </div>
-  `;
-  card.appendChild(header);
-
-  setTimeout(() => {
-    const btn = card.querySelector(`#refresh-card-${inst.id}`);
-    if (btn) {
-      btn.addEventListener("click", () => refreshCard(inst.id));
-    }
-  }, 0);
-
-  if (!data) {
-    card.insertAdjacentHTML("beforeend", `<div class="error-msg">暂无数据</div>`);
-    return card;
-  }
-
-  if (data._lastError) {
-    card.insertAdjacentHTML("beforeend", `<div class="fetch-warn">获取失败（${escapeHtml(data._lastError)}），显示上次数据</div>`);
-  }
-
-  if (data._error && !data._hasValidData) {
-    card.insertAdjacentHTML("beforeend", `<div class="error-msg">${escapeHtml(data._error)}</div>`);
-    card.insertAdjacentHTML("beforeend", `<div class="fetched-at">更新于 ${formatTime(data._fetchedAt)}</div>`);
-    return card;
-  }
-
-  const normalized = normalizeData(inst.type, data);
-  if (!normalized) {
-    card.insertAdjacentHTML("beforeend", `<div class="error-msg">数据格式异常</div>`);
-    card.insertAdjacentHTML("beforeend", `<div class="fetched-at">更新于 ${formatTime(data._fetchedAt)}</div>`);
-    return card;
-  }
-
-  let bodyHtml = "";
-  if (normalized.planType) {
-    bodyHtml += `<span class="plan-type">${escapeHtml(normalized.planType)}</span>`;
-  }
-  for (const win of normalized.windows) {
-    bodyHtml += renderWindowHtml(win);
-  }
-  bodyHtml += renderExtrasHtml(normalized.extras);
-
-  card.insertAdjacentHTML("beforeend", bodyHtml);
-  card.insertAdjacentHTML("beforeend", `<div class="fetched-at">更新于 ${formatTime(data._fetchedAt)}</div>`);
-  return card;
-}
-
-function formatTime(ts) {
-  if (!ts) return "-";
-  const d = new Date(ts);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function pad(n) {
-  return String(n).padStart(2, "0");
 }

@@ -1,26 +1,18 @@
-/* popup.css */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* popup.css - 弹窗页专属样式（通用样式见 common.css） */
 
 body {
   width: 380px;
-  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 13px;
-  color: #1a1a1a;
-  background: #f5f5f7;
 }
 
+/* popup 顶栏比 dashboard 紧凑，覆盖 common.css 的 .topbar */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: #fff;
-  border-bottom: 1px solid #e5e5e7;
+  background: var(--color-card);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header h1 {
@@ -36,7 +28,7 @@ body {
 
 .auto-timer {
   font-size: 11px;
-  color: #8e8e93;
+  color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;
   min-width: 28px;
   text-align: right;
@@ -45,15 +37,15 @@ body {
 #refresh-btn {
   padding: 4px 12px;
   font-size: 12px;
-  border: 1px solid #d1d1d6;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-btn);
+  background: var(--color-card);
   cursor: pointer;
-  color: #1a1a1a;
+  color: var(--color-text);
 }
 
 #refresh-btn:hover:not(:disabled) {
-  background: #f0f0f2;
+  background: var(--color-hover);
 }
 
 #refresh-btn:disabled {
@@ -66,144 +58,67 @@ body {
 }
 
 .source-card {
-  background: #fff;
-  border-radius: 10px;
+  border-radius: var(--radius-inner);
   padding: 12px;
   margin-bottom: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 }
 
 .source-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 10px;
 }
 
 .source-name {
-  font-weight: 600;
   font-size: 13px;
 }
 
-.plan-type {
-  font-size: 11px;
-  color: #fff;
-  background: #6e56cf;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.source-status.error {
-  color: #ff3b30;
-  font-size: 12px;
-}
-
-.error-msg {
-  color: #ff3b30;
-  font-size: 12px;
-  margin-bottom: 6px;
-  word-break: break-all;
-}
-
+/* popup 字号整体比 dashboard 小一号 */
 .window {
   margin-bottom: 10px;
 }
 
-.window:last-child {
-  margin-bottom: 0;
-}
-
 .window-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 4px;
 }
 
 .window-label {
   font-size: 12px;
-  color: #6e6e73;
 }
 
 .window-used {
   font-size: 12px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
 }
 
 .progress-bar {
   height: 6px;
-  background: #e5e5e7;
   border-radius: 3px;
-  overflow: hidden;
   margin-bottom: 4px;
 }
 
 .progress-fill {
-  height: 100%;
   border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.bar-ok {
-  background: #34c759;
-}
-
-.bar-warn {
-  background: #ff9500;
-}
-
-.bar-danger {
-  background: #ff3b30;
 }
 
 .window-detail {
   font-size: 10px;
-  color: #aeacb2;
-  font-variant-numeric: tabular-nums;
   margin-bottom: 3px;
 }
 
 .window-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   font-size: 11px;
-  color: #8e8e93;
-}
-
-.remaining {
-  font-variant-numeric: tabular-nums;
-}
-
-.reset-time {
-  font-variant-numeric: tabular-nums;
-}
-
-.reset-done {
-  color: #34c759;
 }
 
 .fetched-at {
   margin-top: 8px;
   font-size: 10px;
-  color: #c0c0c5;
-  text-align: right;
 }
 
 .empty {
-  text-align: center;
-  color: #8e8e93;
   padding: 30px 0;
   font-size: 13px;
 }
 
 .fetch-warn {
   font-size: 11px;
-  color: #ff9500;
-  background: #fff8f0;
-  border: 1px solid #ffe0b2;
-  border-radius: 6px;
   padding: 3px 6px;
   margin-bottom: 6px;
 }
@@ -212,16 +127,8 @@ body {
   font-size: 11px;
   margin-bottom: 3px;
   padding: 2px 5px;
-  border-radius: 4px;
-  font-variant-numeric: tabular-nums;
 }
 
-.forecast-ok {
-  color: #34c759;
-  background: #f0fff4;
-}
-
-.forecast-warn {
-  color: #ff3b30;
-  background: #fff0f0;
+.plan-type {
+  font-size: 11px;
 }

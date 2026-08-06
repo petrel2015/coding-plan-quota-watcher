@@ -2,7 +2,7 @@
 // 每个卡片独立刷新，互不干扰
 
 const AUTO_REFRESH_SEC = 10;
-const cardTimers = {}; // instanceId -> { countdown, timer, refreshing }
+const cardTimers = {};
 
 document.addEventListener("DOMContentLoaded", () => {
   renderAll();
@@ -33,15 +33,19 @@ async function renderAll() {
 
   for (const inst of enabled) {
     const data = keys[`data_${inst.id}`];
-    const card = renderSource(inst, data);
+    const card = renderSourceCard(inst, data);
     container.appendChild(card);
-    // 启动独立刷新计时
+    bindCardRefresh(inst.id);
     startCardTimer(inst.id);
   }
 }
 
+function bindCardRefresh(instanceId) {
+  const btn = document.getElementById(`refresh-card-${instanceId}`);
+  if (btn) btn.addEventListener("click", () => refreshCard(instanceId));
+}
+
 function startCardTimer(instanceId) {
-  // 清除旧计时器
   if (cardTimers[instanceId]?.timer) {
     clearInterval(cardTimers[instanceId].timer);
   }
@@ -71,7 +75,6 @@ async function refreshCard(instanceId) {
 
   await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
 
-  // 只更新这一张卡片
   setTimeout(() => {
     updateCard(instanceId);
     if (btn) { btn.textContent = "刷新"; btn.disabled = false; }
@@ -98,110 +101,8 @@ async function updateCard(instanceId) {
 
   const oldCard = document.getElementById(`card-${instanceId}`);
   if (oldCard) {
-    const newCard = renderSource(inst, data);
+    const newCard = renderSourceCard(inst, data);
+    bindCardRefresh(instanceId);
     oldCard.replaceWith(newCard);
   }
-}
-
-function renderSource(inst, data) {
-  const card = document.createElement("div");
-  card.className = "source-card";
-  card.id = `card-${inst.id}`;
-
-  const header = document.createElement("div");
-  header.className = "source-header";
-  header.innerHTML = `
-    <span class="source-name">${escapeHtml(inst.name)}</span>
-    <div class="card-controls">
-      <span id="timer-${inst.id}" class="card-timer">${AUTO_REFRESH_SEC}s</span>
-      <button id="refresh-card-${inst.id}" class="card-refresh-btn">刷新</button>
-    </div>
-  `;
-  card.appendChild(header);
-
-  // 绑定刷新按钮
-  setTimeout(() => {
-    const btn = card.querySelector(`#refresh-card-${inst.id}`);
-    if (btn) {
-      btn.addEventListener("click", () => refreshCard(inst.id));
-    }
-  }, 0);
-
-  // 首次无数据
-  if (!data) {
-    const note = document.createElement("div");
-    note.className = "error-msg";
-    note.textContent = "暂无数据，点击刷新获取";
-    card.appendChild(note);
-    return card;
-  }
-
-  // 有上次成功数据 + 本次失败
-  if (data._lastError) {
-    const warn = document.createElement("div");
-    warn.className = "fetch-warn";
-    warn.textContent = `获取失败（${data._lastError}），显示上次数据`;
-    card.appendChild(warn);
-  }
-
-  // 完全无成功数据
-  if (data._error && !data._hasValidData) {
-    const err = document.createElement("div");
-    err.className = "error-msg";
-    err.textContent = data._error;
-    card.appendChild(err);
-    const ts = document.createElement("div");
-    ts.className = "fetched-at";
-    ts.textContent = `更新于 ${formatTime(data._fetchedAt)}`;
-    card.appendChild(ts);
-    return card;
-  }
-
-  // 正常渲染
-  const normalized = normalizeData(inst.type, data);
-  if (!normalized) {
-    const err = document.createElement("div");
-    err.className = "error-msg";
-    err.textContent = "数据格式异常";
-    card.appendChild(err);
-    const ts = document.createElement("div");
-    ts.className = "fetched-at";
-    ts.textContent = `更新于 ${formatTime(data._fetchedAt)}`;
-    card.appendChild(ts);
-    return card;
-  }
-
-  const wrap = document.createElement("div");
-
-  if (normalized.planType) {
-    const badge = document.createElement("span");
-    badge.className = "plan-type";
-    badge.textContent = normalized.planType;
-    wrap.appendChild(badge);
-  }
-
-  for (const win of normalized.windows) {
-    wrap.insertAdjacentHTML("beforeend", renderWindowHtml(win));
-  }
-
-  wrap.insertAdjacentHTML("beforeend", renderExtrasHtml(normalized.extras));
-
-  card.appendChild(wrap);
-
-  const ts = document.createElement("div");
-  ts.className = "fetched-at";
-  ts.textContent = `更新于 ${formatTime(data._fetchedAt)}`;
-  card.appendChild(ts);
-
-  return card;
-}
-
-function formatTime(ts) {
-  if (!ts) return "-";
-  const d = new Date(ts);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function pad(n) {
-  return String(n).padStart(2, "0");
 }
