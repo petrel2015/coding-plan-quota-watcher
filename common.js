@@ -32,11 +32,23 @@ function renderSourceCard(inst, data) {
   card.id = `card-${inst.id}`;
   card.dataset.instanceId = inst.id;
 
-  // 头部：名称 + 右上角（相对时间 + 单卡刷新按钮）
+  // 提前归一化，以便在 header 内显示 planType 徽章
+  let normalized = null;
+  if (data && !(data._error && !data._hasValidData)) {
+    try { normalized = normalizeData(inst.type, data); } catch (e) {}
+  }
+
+  // 头部：名称 + planType 徽章 + 右上角（相对时间 + 单卡刷新按钮）
   const header = document.createElement("div");
   header.className = "source-header";
+  const planBadge = normalized && normalized.planType
+    ? `<span class="plan-type">${escapeHtml(normalized.planType)}</span>`
+    : "";
   header.innerHTML = `
-    <span class="source-name">${escapeHtml(inst.name)}</span>
+    <div class="source-title">
+      <span class="source-name">${escapeHtml(inst.name)}</span>
+      ${planBadge}
+    </div>
     <div class="card-controls">
       <span id="refreshed-at-${inst.id}" class="card-refreshed-at"></span>
       <button id="refresh-card-${inst.id}" class="card-refresh-btn" title="刷新此卡片">刷新</button>
@@ -55,17 +67,17 @@ function renderSourceCard(inst, data) {
     warn.className = "fetch-warn";
     warn.textContent = `获取失败（${data._lastError}），显示上次数据`;
     card.appendChild(warn);
-    appendNormalized(card, inst, data);
+    appendNormalized(card, normalized);
   } else if (data._error && !data._hasValidData) {
     const err = document.createElement("div");
     err.className = "error-msg";
     err.textContent = data._error;
     card.appendChild(err);
   } else {
-    appendNormalized(card, inst, data);
+    appendNormalized(card, normalized);
   }
 
-  // 底部更新时间（相对时间，由 QuotaApp.refreshTick 定时刷新文本）
+  // 底部更新时间（相对时间，由 QuotaApp._refreshRelativeTimes 定时刷新文本）
   const ts = document.createElement("div");
   ts.className = "fetched-at";
   ts.id = `fetched-at-${inst.id}`;
@@ -84,9 +96,8 @@ function renderSourceCard(inst, data) {
   return card;
 }
 
-// 归一化并追加窗口/extras 到 card
-function appendNormalized(card, inst, data) {
-  const normalized = normalizeData(inst.type, data);
+// 追加窗口/extras 到 card（normalized 已由调用方计算）
+function appendNormalized(card, normalized) {
   if (!normalized) {
     const err = document.createElement("div");
     err.className = "error-msg";
@@ -97,13 +108,6 @@ function appendNormalized(card, inst, data) {
 
   const wrap = document.createElement("div");
   wrap.className = "card-body";
-
-  if (normalized.planType) {
-    const badge = document.createElement("span");
-    badge.className = "plan-type";
-    badge.textContent = normalized.planType;
-    wrap.appendChild(badge);
-  }
 
   wrap.insertAdjacentHTML("beforeend", normalized.windows.map(renderWindowHtml).join(""));
   wrap.insertAdjacentHTML("beforeend", renderExtrasHtml(normalized.extras));
