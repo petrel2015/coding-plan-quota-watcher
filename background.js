@@ -1,90 +1,8 @@
 // background.js - Service Worker
 // 从 storage 读取实例配置，动态拉取数据，缓存到 storage
+// 数据源模板从 sources.js 引入（单一来源，与 settings.js 共用）
 
-const SOURCE_TEMPLATES = {
-  "volcengine-ark": {
-    url: "https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetAgentPlanAFPUsage?",
-    method: "POST",
-    body: {},
-    cookieDomains: ["console.volcengine.com", "volcengine.com", "signin.volcengine.com"],
-    partitionKey: { topLevelSite: "https://console.volcengine.com" },
-    csrfCookieName: "csrfToken",
-    headers: {
-      "accept": "application/json, text/plain, */*",
-      "content-type": "application/json",
-      "origin": "https://console.volcengine.com",
-      "referer": "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
-    },
-  },
-  "minimax": {
-    url: "https://www.minimaxi.com/backend/account/token_plan/remains_percent",
-    method: "GET",
-    body: null,
-    cookieDomains: ["minimaxi.com", "www.minimaxi.com", "platform.minimaxi.com"],
-    csrfCookieName: null,
-    extraHeadersFromCookie: [
-      { cookieName: "minimax_group_id_v2", headerName: "x-group-id" },
-    ],
-    headers: {
-      "accept": "application/json, text/plain, */*",
-      "origin": "https://platform.minimaxi.com",
-      "referer": "https://platform.minimaxi.com/",
-    },
-  },
-  "chatgpt-codex": {
-    url: "https://chatgpt.com/backend-api/wham/usage",
-    method: "GET",
-    body: null,
-    cookieDomains: ["chatgpt.com", ".chatgpt.com"],
-    partitionKey: { topLevelSite: "https://chatgpt.com" },
-    csrfCookieName: null,
-    // 本地模式：通过 session 接口获取 accessToken
-    tokenEndpoint: "https://chatgpt.com/api/auth/session",
-    tokenField: "accessToken",
-    tokenHeader: "authorization",
-    tokenPrefix: "Bearer ",
-    // 本地模式：从 cookie 提取 oai-device-id
-    extraHeadersFromCookie: [
-      { cookieName: "oai-did", headerName: "oai-device-id" },
-    ],
-    // 手动 curl 模式：从 curl headers 透传这些 header
-    preserveHeaders: [
-      "authorization",
-      "oai-device-id",
-      "oai-client-version",
-      "oai-client-build-number",
-      "oai-language",
-      "oai-session-id",
-    ],
-    headers: {
-      "accept": "*/*",
-      "referer": "https://chatgpt.com/",
-    },
-  },
-  "zhipu-glm": {
-    url: "https://bigmodel.cn/api/monitor/usage/quota/limit?type=1",
-    method: "GET",
-    body: null,
-    cookieDomains: ["bigmodel.cn", ".bigmodel.cn"],
-    csrfCookieName: null,
-    // 本地模式：从 cookie 提取 JWT 作为 authorization header
-    extraHeadersFromCookie: [
-      { cookieName: "bigmodel_token_production", headerName: "authorization" },
-    ],
-    // 手动 curl 模式：从 curl headers 透传这些 header
-    preserveHeaders: [
-      "authorization",
-      "bigmodel-organization",
-      "bigmodel-project",
-    ],
-    headers: {
-      "accept": "application/json, text/plain, */*",
-      "accept-language": "zh",
-      "referer": "https://bigmodel.cn/coding-plan/personal/usage",
-      "set-language": "zh",
-    },
-  },
-};
+importScripts("sources.js");
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
@@ -212,8 +130,8 @@ async function fetchInstance(inst) {
     cookieStr = parsed.cookieStr;
 
     if (tmpl.csrfCookieName) {
-      // 优先从 curl header 提取 csrfToken（X-Csrf-Token / x-csrf-token）
-      csrfToken = parsed.headers["x-csrf-token"] || parsed.headers["x-csrf-token"] || "";
+      // 优先从 curl header 提取 csrfToken（parseCurl 已把 key 统一 lowercase）
+      csrfToken = parsed.headers["x-csrf-token"] || "";
       // 如果 header 里没有，从 cookie 字符串提取
       if (!csrfToken) {
         const match = cookieStr.match(new RegExp(`(?:^|;\\s*)${tmpl.csrfCookieName}=([^;]+)`));
