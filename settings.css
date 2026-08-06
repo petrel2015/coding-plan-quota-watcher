@@ -135,7 +135,6 @@ body {
   font-size: 13px;
   border: 1px solid #d1d1d6;
   border-radius: 6px;
-  border: 1px solid #d1d1d6;
   background: #fff;
 }
 
@@ -196,23 +195,6 @@ select.field-input { cursor: pointer; }
 
 .toggle input:checked + .toggle-slider { background: #34c759; }
 .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
-
-.save-bar {
-  margin-top: 16px;
-  text-align: right;
-}
-
-#save-btn {
-  padding: 8px 24px;
-  font-size: 14px;
-  border: none;
-  border-radius: 6px;
-  background: #6e56cf;
-  color: #fff;
-  cursor: pointer;
-}
-
-#save-btn:hover { background: #5b46b0; }
 
 .toast {
   position: fixed;

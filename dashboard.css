@@ -35,32 +35,6 @@ body {
   gap: 10px;
 }
 
-.auto-timer {
-  font-size: 12px;
-  color: #8e8e93;
-  font-variant-numeric: tabular-nums;
-  min-width: 28px;
-  text-align: right;
-}
-
-#refresh-btn {
-  padding: 6px 16px;
-  font-size: 13px;
-  border: 1px solid #d1d1d6;
-  border-radius: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-
-#refresh-btn:hover:not(:disabled) {
-  background: #f0f0f2;
-}
-
-#refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .sources-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -87,14 +61,6 @@ body {
   font-size: 14px;
 }
 
-.source-auth-badge {
-  font-size: 10px;
-  color: #8e8e93;
-  background: #f0f0f2;
-  padding: 2px 6px;
-  border-radius: 8px;
-}
-
 .source-controls {
   display: flex;
   align-items: center;
@@ -107,48 +73,6 @@ body {
   background: #6e56cf;
   padding: 2px 8px;
   border-radius: 10px;
-}
-
-/* toggle switch */
-.toggle {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  cursor: pointer;
-}
-
-.toggle input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle-slider {
-  position: absolute;
-  inset: 0;
-  background: #d1d1d6;
-  border-radius: 10px;
-  transition: 0.2s;
-}
-
-.toggle-slider::before {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  left: 2px;
-  top: 2px;
-  background: #fff;
-  border-radius: 50%;
-  transition: 0.2s;
-}
-
-.toggle input:checked + .toggle-slider {
-  background: #34c759;
-}
-
-.toggle input:checked + .toggle-slider::before {
-  transform: translateX(16px);
 }
 
 .source-status.error {
@@ -189,18 +113,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.window-pct {
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.remaining {
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  color: #aeacb2;
-}
-
 .progress-bar {
   height: 8px;
   background: #e5e5e7;
@@ -234,7 +146,6 @@ body {
   color: #8e8e93;
 }
 
-.remaining { font-variant-numeric: tabular-nums; }
 .reset-time { font-variant-numeric: tabular-nums; }
 .reset-done { color: #34c759; }
 
@@ -251,30 +162,6 @@ body {
   padding: 40px 0;
   font-size: 14px;
   grid-column: 1 / -1;
-}
-
-.window-group {
-  margin-bottom: 10px;
-  padding-bottom: 8px;
-  border-bottom: 1px dashed #e5e5e7;
-}
-
-.window-group:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-.window-group-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 5px;
-}
-
-.window-inactive {
-  font-size: 12px;
-  color: #c0c0c5;
-  padding: 2px 0;
 }
 
 .fetch-warn {

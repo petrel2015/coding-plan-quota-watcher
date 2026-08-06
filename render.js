@@ -1,5 +1,16 @@
 // render.js - 共享渲染逻辑（dashboard + popup 共用）
 
+// HTML 转义，防止用户/API 返回的内容注入
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // 将各数据源的原始 API 返回归一化为统一结构
 // 返回: { planType, windows: [{label, usedPct, detail, resetMs, startMs}], extras: [{label, value}] }
 function normalizeData(type, data) {
@@ -207,7 +218,7 @@ function renderWindowHtml(win) {
   const barClass = pct >= 90 ? "bar-danger" : pct >= 70 ? "bar-warn" : "bar-ok";
   const resetInMs = win.resetMs - Date.now();
   const isReset = resetInMs <= 0;
-  const detail = win.detail || "&nbsp;";
+  const detail = win.detail ? escapeHtml(win.detail) : "&nbsp;";
   const resetStr = win.resetMs
     ? (isReset ? "已重置" : `重置倒计时 ${formatCountdown(resetInMs)}`)
     : "&nbsp;";
@@ -247,7 +258,7 @@ function renderWindowHtml(win) {
   return `
     <div class="window">
       <div class="window-header">
-        <span class="window-label">${win.label}</span>
+        <span class="window-label">${escapeHtml(win.label)}</span>
         <span class="window-used">${pct.toFixed(1)}%</span>
       </div>
       <div class="progress-bar">
@@ -267,7 +278,7 @@ function renderExtrasHtml(extras) {
   if (!extras || extras.length === 0) return "";
   return extras
     .filter((ex) => ex.value != null)
-    .map((ex) => `<div class="window-detail">${ex.label}: ${ex.value}</div>`)
+    .map((ex) => `<div class="window-detail">${escapeHtml(ex.label)}: ${escapeHtml(ex.value)}</div>`)
     .join("");
 }
 

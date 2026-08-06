@@ -198,24 +198,6 @@ body {
   font-size: 13px;
 }
 
-.window-group {
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed #e5e5e7;
-}
-
-.window-group:last-child {
-  border-bottom: none;
-  margin-bottom: 0;
-}
-
-.window-group-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin-bottom: 4px;
-}
-
 .fetch-warn {
   font-size: 11px;
   color: #ff9500;
@@ -242,10 +224,4 @@ body {
 .forecast-warn {
   color: #ff3b30;
   background: #fff0f0;
-}
-
-.window-inactive {
-  font-size: 11px;
-  color: #c0c0c5;
-  padding: 2px 0;
 }

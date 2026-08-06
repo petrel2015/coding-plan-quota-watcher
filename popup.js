@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("dashboard-btn").addEventListener("click", () => {
     chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
   });
-  document.getElementById("refresh-all-btn").addEventListener("click", () => {
+  document.getElementById("refresh-btn").addEventListener("click", () => {
     refreshAllCards();
   });
 });
@@ -105,7 +105,7 @@ function renderSource(inst, data) {
   const header = document.createElement("div");
   header.className = "source-header";
   header.innerHTML = `
-    <span class="source-name">${inst.name}</span>
+    <span class="source-name">${escapeHtml(inst.name)}</span>
     <div class="card-controls">
       <span id="timer-${inst.id}" class="card-timer">${AUTO_REFRESH_SEC}s</span>
       <button id="refresh-card-${inst.id}" class="card-refresh-btn">刷新</button>
@@ -126,11 +126,11 @@ function renderSource(inst, data) {
   }
 
   if (data._lastError) {
-    card.insertAdjacentHTML("beforeend", `<div class="fetch-warn">获取失败（${data._lastError}），显示上次数据</div>`);
+    card.insertAdjacentHTML("beforeend", `<div class="fetch-warn">获取失败（${escapeHtml(data._lastError)}），显示上次数据</div>`);
   }
 
   if (data._error && !data._hasValidData) {
-    card.insertAdjacentHTML("beforeend", `<div class="error-msg">${data._error}</div>`);
+    card.insertAdjacentHTML("beforeend", `<div class="error-msg">${escapeHtml(data._error)}</div>`);
     card.insertAdjacentHTML("beforeend", `<div class="fetched-at">更新于 ${formatTime(data._fetchedAt)}</div>`);
     return card;
   }
@@ -144,7 +144,7 @@ function renderSource(inst, data) {
 
   let bodyHtml = "";
   if (normalized.planType) {
-    bodyHtml += `<span class="plan-type">${normalized.planType}</span>`;
+    bodyHtml += `<span class="plan-type">${escapeHtml(normalized.planType)}</span>`;
   }
   for (const win of normalized.windows) {
     bodyHtml += renderWindowHtml(win);

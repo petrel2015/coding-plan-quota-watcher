@@ -111,7 +111,7 @@ function renderSource(inst, data) {
   const header = document.createElement("div");
   header.className = "source-header";
   header.innerHTML = `
-    <span class="source-name">${inst.name}</span>
+    <span class="source-name">${escapeHtml(inst.name)}</span>
     <div class="card-controls">
       <span id="timer-${inst.id}" class="card-timer">${AUTO_REFRESH_SEC}s</span>
       <button id="refresh-card-${inst.id}" class="card-refresh-btn">刷新</button>
