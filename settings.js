@@ -284,11 +284,15 @@ async function addInstance() {
   await collectCardsToStorage();
   const result = await chrome.storage.local.get("instances");
   const instances = result.instances || [];
-  // 默认加火山方舟
-  const count = instances.filter((i) => i.type === "volcengine-ark").length + 1;
+  // 默认名字 "coding plan"，已存在则递增 "coding plan #2"/"#3"...
+  const baseName = "coding plan";
+  const dupCount = instances.filter(
+    (i) => i.name === baseName || i.name.startsWith(baseName + " #")
+  ).length;
+  const name = dupCount === 0 ? baseName : `${baseName} #${dupCount + 1}`;
   instances.push({
     id: `${Date.now()}`,
-    name: `火山方舟 #${count}`,
+    name,
     type: "volcengine-ark",
     enabled: true,
     authMode: "manual",
