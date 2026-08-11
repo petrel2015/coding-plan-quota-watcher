@@ -1,6 +1,8 @@
 // dashboard.js - 全屏 dashboard 页面（共享协调器见 common.js）
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme();
+
   document.getElementById("settings-btn").addEventListener("click", () => {
     window.location.href = "settings.html";
   });

@@ -1,6 +1,41 @@
-// common.js - popup 与 dashboard 共享的渲染、刷新协调与工具逻辑
+// common.js - dashboard 页共享的渲染、刷新协调与工具逻辑
 // 依赖 render.js 提供: normalizeData / renderWindowHtml / renderExtrasHtml /
 //   escapeHtml / formatNum / formatTime / pad（均在全局作用域）
+// 依赖 sources.js 提供: migrateInstances（HTML 中需先加载 sources.js）
+
+// ------------------------------------------------------------
+// 主题管理（light / dark / auto 三档，持久化到 storage）
+// ------------------------------------------------------------
+
+// 从 storage 读取主题并应用到 <html data-theme>，应在页面初始化时尽早调用
+async function applyTheme() {
+  const { theme } = await chrome.storage.local.get("theme");
+  setThemeAttr(theme || "auto");
+}
+
+// 设置 <html data-theme> 属性（auto 时不设属性，回退到 CSS media query）
+function setThemeAttr(theme) {
+  if (theme === "light" || theme === "dark") {
+    document.documentElement.setAttribute("data-theme", theme);
+  } else {
+    // auto：移除属性，让 CSS @media 接管
+    document.documentElement.removeAttribute("data-theme");
+  }
+}
+
+// ------------------------------------------------------------
+// instances 读取（带字段迁移，与 background/settings 共用 migrateInstances）
+// ------------------------------------------------------------
+
+async function loadInstances() {
+  const { instances } = await chrome.storage.local.get("instances");
+  if (!instances) return [];
+  const { instances: migrated, changed } = migrateInstances(instances);
+  if (changed) {
+    await chrome.storage.local.set({ instances: migrated });
+  }
+  return migrated;
+}
 
 // ------------------------------------------------------------
 // 工具函数
@@ -116,7 +151,7 @@ function appendNormalized(card, normalized) {
 }
 
 // ------------------------------------------------------------
-// 刷新协调器（popup / dashboard 共用）
+// 刷新协调器（dashboard 用）
 // ------------------------------------------------------------
 
 const QuotaApp = {
@@ -130,6 +165,8 @@ const QuotaApp = {
   _tickTimer: null,
   // 页面配置（由 init 注入）
   _config: null,
+  // renderAll 序列化锁，防止并发 renderAll 互相覆盖 DOM
+  _renderChain: Promise.resolve(),
 
   /**
    * 初始化应用
@@ -171,19 +208,25 @@ const QuotaApp = {
     this._tickTimer = setInterval(() => this._refreshRelativeTimes(), 15000);
   },
 
-  // 渲染全部卡片
+  // 渲染全部卡片（串行：多个并发 renderAll 排队执行，避免互相覆盖 DOM）
   async renderAll() {
+    const run = () => this._renderAllInner();
+    this._renderChain = this._renderChain.then(run, run);
+    return this._renderChain;
+  },
+
+  async _renderAllInner() {
     const container = document.getElementById(this._config.containerId);
     container.innerHTML = "";
     this._renderedIds.clear();
 
-    const keys = await chrome.storage.local.get(null);
-    const instances = keys.instances || [];
+    const instances = await loadInstances();
     const enabled = instances.filter((i) => i.enabled);
 
     // dashboard 按设置调整列数
     if (this._config.useDisplayCols) {
-      const cols = keys.displayCols || 2;
+      const { displayCols } = await chrome.storage.local.get("displayCols");
+      const cols = displayCols || 2;
       container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
     }
 
@@ -192,8 +235,12 @@ const QuotaApp = {
       return;
     }
 
+    // 一次性拉取所有 data_* 缓存
+    const dataKeys = enabled.map((i) => `data_${i.id}`);
+    const dataResult = await chrome.storage.local.get(dataKeys);
+
     for (const inst of enabled) {
-      const data = keys[`data_${inst.id}`];
+      const data = dataResult[`data_${inst.id}`];
       const card = renderSourceCard(inst, data);
       container.appendChild(card);
       this._bindCardRefresh(inst.id);
@@ -209,11 +256,13 @@ const QuotaApp = {
 
   // 更新单张卡片（不重排，仅替换 DOM）
   async updateCard(instanceId) {
-    const keys = await chrome.storage.local.get(["instances", `data_${instanceId}`]);
-    const instances = keys.instances || [];
+    const [instances, dataResult] = await Promise.all([
+      loadInstances(),
+      chrome.storage.local.get(`data_${instanceId}`),
+    ]);
     const inst = instances.find((i) => i.id === instanceId);
     if (!inst) return;
-    const data = keys[`data_${instanceId}`];
+    const data = dataResult[`data_${instanceId}`];
 
     const oldCard = document.getElementById(`card-${instanceId}`);
     if (oldCard) {

@@ -1,0 +1,13 @@
+{
+  "name": "coding-plan-quota-watcher",
+  "version": "1.7.0",
+  "private": true,
+  "description": "Chrome 扩展：统一查看多个 AI Coding Plan 的用量和刷新时间",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}

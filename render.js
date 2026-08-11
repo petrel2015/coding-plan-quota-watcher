@@ -1,4 +1,4 @@
-// render.js - 共享渲染逻辑（dashboard + popup 共用）
+// render.js - 共享渲染逻辑（dashboard 页面用）
 
 // HTML 转义，防止用户/API 返回的内容注入
 function escapeHtml(s) {
@@ -325,4 +325,9 @@ function formatDuration(ms) {
 
 function pad(n) {
   return String(n).padStart(2, "0");
+}
+
+// UMD 导出：node/vitest 用 require，浏览器经典脚本挂全局
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { normalizeData, escapeHtml, formatNum, formatCountdown, formatDuration, pad };
 }

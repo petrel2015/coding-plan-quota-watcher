@@ -38,7 +38,7 @@ const SOURCE_TEMPLATES = {
       "origin": "https://platform.minimaxi.com",
       "referer": "https://platform.minimaxi.com/",
     },
-    loginUrl: "https://platform.minimaxi.com/",
+    loginUrl: "https://platform.minimaxi.com/login",
     curlHint: "DevTools -> Network -> 找 remains_percent 请求 -> 右键 Copy as cURL",
     curlHintUrl: "https://platform.minimaxi.com/",
     curl2Hint: "DevTools -> Network -> 找 consumption_records 请求 -> 右键 Copy as cURL（用于获取套餐名，可选）",
@@ -124,14 +124,38 @@ const DEFAULT_INSTANCES = [
     authMode: "local",
     manualCurl: "",
   },
+  {
+    id: "zhipu-glm-1",
+    name: "智谱 GLM #1",
+    type: "zhipu-glm",
+    enabled: true,
+    authMode: "local",
+    manualCurl: "",
+  },
 ];
+
+// 迁移旧字段 manualCookie → manualCurl（纯函数，可被测试）
+// 返回 { instances, changed }；不修改入参，返回新数组
+function migrateInstances(inputInstances) {
+  const instances = (inputInstances || []).map((inst) => ({ ...inst }));
+  let changed = false;
+  for (const inst of instances) {
+    if (inst.manualCookie && !inst.manualCurl) {
+      inst.manualCurl = inst.manualCookie;
+      delete inst.manualCookie;
+      changed = true;
+    }
+  }
+  return { instances, changed };
+}
 
 // UMD 导出：node/vitest 用 require，浏览器经典脚本挂全局
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { SOURCE_TEMPLATES, SOURCE_ORDER, DEFAULT_INSTANCES };
+  module.exports = { SOURCE_TEMPLATES, SOURCE_ORDER, DEFAULT_INSTANCES, migrateInstances };
 }
 if (typeof globalThis !== "undefined") {
   globalThis.SOURCE_TEMPLATES = SOURCE_TEMPLATES;
   globalThis.SOURCE_ORDER = SOURCE_ORDER;
   globalThis.DEFAULT_INSTANCES = DEFAULT_INSTANCES;
+  globalThis.migrateInstances = migrateInstances;
 }

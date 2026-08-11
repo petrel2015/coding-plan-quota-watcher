@@ -7,16 +7,74 @@ importScripts("sources.js");
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
 
-chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[QuotaWatcher v1.6.5] installed");
-  // 清理所有残留 DNR 规则
-  const existingRules = await chrome.declarativeNetRequest.getDynamicRules();
-  if (existingRules.length > 0) {
+// ------------------------------------------------------------
+// DNR（declarativeNetRequest）助手
+// ------------------------------------------------------------
+
+// 清除所有残留动态规则
+async function clearAllDnrRules() {
+  const existing = await chrome.declarativeNetRequest.getDynamicRules();
+  if (existing.length > 0) {
     await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: existingRules.map((r) => r.id),
+      removeRuleIds: existing.map((r) => r.id),
     });
-    console.log(`[QuotaWatcher] cleaned ${existingRules.length} stale DNR rules`);
   }
+}
+
+// 动态 ruleId：1_000_000 ~ 2_000_000 之间递增，避开静态规则，杜绝并发冲突
+let _nextRuleId = 1000000;
+function allocRuleId() {
+  const id = _nextRuleId;
+  _nextRuleId = (_nextRuleId + 1) % 2000000;
+  if (_nextRuleId < 1000000) _nextRuleId = 1000000;
+  return id;
+}
+
+/**
+ * 用 DNR 临时注入 Cookie 发起一次请求，结束后自动清理规则。
+ * 串联在 serializeFetch 锁内调用，确保同一时间只有一个活跃规则。
+ * @param {string} url        目标 URL（不含 _qwid）
+ * @param {string} cookieStr  要注入的 Cookie 值
+ * @param {object} fetchOpts  传给 fetch 的选项（method/headers/body 等）
+ * @returns {Promise<Response>}
+ */
+async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
+  const ruleId = allocRuleId();
+  const qwid = `${ruleId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const bustUrl = new URL(url);
+  bustUrl.searchParams.set("_qwid", qwid);
+
+  await chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [ruleId],
+    addRules: [{
+      id: ruleId,
+      priority: 1,
+      action: {
+        type: "modifyHeaders",
+        requestHeaders: [
+          { header: "cookie", operation: "set", value: cookieStr },
+        ],
+      },
+      condition: {
+        urlFilter: `_qwid=${qwid}`,
+        resourceTypes: ["xmlhttprequest", "other"],
+      },
+    }],
+  });
+
+  try {
+    return await fetch(bustUrl.toString(), { ...fetchOpts, cache: "no-store" });
+  } finally {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [ruleId],
+    }).catch(() => {});
+  }
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log(`[QuotaWatcher v${chrome.runtime.getManifest().version}] installed`);
+  await clearAllDnrRules();
+  console.log("[QuotaWatcher] cleaned stale DNR rules");
   chrome.alarms.create(ALARM_NAME, { periodInMinutes: REFRESH_INTERVAL_MINUTES });
   refreshAll();
 });
@@ -37,10 +95,21 @@ function serializeFetch(fn) {
   return _fetchChain;
 }
 
-async function getInstances() {
+// 读取全部 instances（带字段迁移），写回 storage 若有变化
+async function loadAllInstances() {
   const result = await chrome.storage.local.get("instances");
   if (!result.instances) return [];
-  return result.instances.filter((i) => i.enabled);
+  const { instances, changed } = migrateInstances(result.instances);
+  if (changed) {
+    await chrome.storage.local.set({ instances });
+    console.log("[QuotaWatcher] migrated manualCookie → manualCurl");
+  }
+  return instances;
+}
+
+async function getInstances() {
+  const instances = await loadAllInstances();
+  return instances.filter((i) => i.enabled);
 }
 
 let _refreshing = false;
@@ -65,8 +134,7 @@ async function refreshAll() {
 
 // 刷新单个实例（卡片调用）
 async function refreshOne(instanceId) {
-  const result = await chrome.storage.local.get("instances");
-  const instances = result.instances || [];
+  const instances = await loadAllInstances();
   const inst = instances.find((i) => i.id === instanceId && i.enabled);
   if (!inst) return;
   await serializeFetch(() => fetchAndStore(inst));
@@ -218,57 +286,18 @@ async function fetchInstance(inst) {
 
     // 如果需要 tokenEndpoint（如 ChatGPT），先获取 accessToken
     if (tmpl.tokenEndpoint) {
-      const tokenUrlObj = new URL(tmpl.tokenEndpoint);
-      const tokenQwid = inst.id + "_" + Date.now() + "_t";
-      const tokenBustUrl = new URL(tmpl.tokenEndpoint);
-      tokenBustUrl.searchParams.set("_qwid", tokenQwid);
-      const tokenRuleId = 3;
-
-      // 清除残留规则
-      const tokenAllRules = await chrome.declarativeNetRequest.getDynamicRules();
-      if (tokenAllRules.length > 0) {
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          removeRuleIds: tokenAllRules.map((r) => r.id),
-        });
+      const tokenResp = await fetchWithDnrCookie(
+        tmpl.tokenEndpoint,
+        cookieStr,
+        { headers: { accept: "*/*" } }
+      );
+      if (!tokenResp.ok) {
+        throw new Error(`Token 接口 HTTP ${tokenResp.status}`);
       }
-
-      const tokenDnrRule = {
-        id: tokenRuleId,
-        priority: 1,
-        action: {
-          type: "modifyHeaders",
-          requestHeaders: [
-            { header: "cookie", operation: "set", value: cookieStr },
-          ],
-        },
-        condition: {
-          urlFilter: `_qwid=${tokenQwid}`,
-          resourceTypes: ["xmlhttprequest", "other"],
-        },
-      };
-
-      await chrome.declarativeNetRequest.updateDynamicRules({
-        removeRuleIds: [tokenRuleId],
-        addRules: [tokenDnrRule],
-      });
-
-      try {
-        const tokenResp = await fetch(tokenBustUrl.toString(), {
-          headers: { "accept": "*/*" },
-          cache: "no-store",
-        });
-        if (!tokenResp.ok) {
-          throw new Error(`Token 接口 HTTP ${tokenResp.status}`);
-        }
-        const tokenData = await tokenResp.json();
-        authToken = tokenData[tmpl.tokenField] || "";
-        if (!authToken) {
-          throw new Error(`无法从 ${tmpl.tokenEndpoint} 获取 accessToken，可能未登录`);
-        }
-      } finally {
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          removeRuleIds: [tokenRuleId],
-        });
+      const tokenData = await tokenResp.json();
+      authToken = tokenData[tmpl.tokenField] || "";
+      if (!authToken) {
+        throw new Error(`无法从 ${tmpl.tokenEndpoint} 获取 accessToken，可能未登录`);
       }
     }
   }
@@ -284,146 +313,69 @@ async function fetchInstance(inst) {
     headers[tmpl.tokenHeader] = tmpl.tokenPrefix + authToken;
   }
 
-  // DNR 注入 Cookie header
-  // 先清除所有残留动态规则，确保只有当前规则生效
-  const allRules = await chrome.declarativeNetRequest.getDynamicRules();
-  if (allRules.length > 0) {
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: allRules.map((r) => r.id),
-    });
-  }
-
-  const urlObj = new URL(tmpl.url);
-  const qwid = inst.id + "_" + Date.now();
-  const bustUrl = new URL(tmpl.url);
-  bustUrl.searchParams.set("_qwid", qwid);
-
-  const ruleId = 1;
-
-  const dnrRule = {
-    id: ruleId,
-    priority: 1,
-    action: {
-      type: "modifyHeaders",
-      requestHeaders: [
-        { header: "cookie", operation: "set", value: cookieStr },
-      ],
-    },
-    condition: {
-      urlFilter: `_qwid=${qwid}`,
-      resourceTypes: ["xmlhttprequest", "other"],
-    },
-  };
-
-  await chrome.declarativeNetRequest.updateDynamicRules({
-    removeRuleIds: [ruleId],
-    addRules: [dnrRule],
-  });
-
-  const fetchOpts = { method: tmpl.method, headers, cache: "no-store" };
+  const fetchOpts = { method: tmpl.method, headers };
   if (tmpl.body) fetchOpts.body = JSON.stringify(tmpl.body);
 
-  try {
-    const resp = await fetch(bustUrl.toString(), fetchOpts);
-    if (!resp.ok) {
-      const bodyText = await resp.text().catch(() => "");
-      throw new Error(`HTTP ${resp.status}: ${bodyText.substring(0, 200)}`);
-    }
-    const result = await resp.json();
-
-    // chatgpt-codex: 额外获取 codex-reset.com 重置预测（公开 API，无需鉴权）
-    if (inst.type === "chatgpt-codex") {
-      try {
-        const forecastResp = await fetch(
-          "https://codex-reset.com/api/forecast?tz=Asia%2FShanghai&locale=zh",
-          { headers: { "accept": "application/json", "referer": "https://codex-reset.com/zh/" } }
-        );
-        if (forecastResp.ok) {
-          result._resetForecast = await forecastResp.json();
-        }
-      } catch (e) {
-        console.log("[QuotaWatcher] forecast fetch failed:", e.message);
-      }
-    }
-
-    // minimax: 额外获取 consumption_records 查询套餐名
-    if (inst.type === "minimax") {
-      try {
-        let secUrl, secCookieStr, secHeaders;
-
-        if (inst.authMode === "manual" && inst.manualCurl2) {
-          const parsed2 = parseCurl(inst.manualCurl2);
-          secUrl = parsed2.url;
-          secCookieStr = parsed2.cookieStr;
-          secHeaders = { ...tmpl.headers };
-          if (parsed2.headers["x-group-id"]) {
-            secHeaders["x-group-id"] = parsed2.headers["x-group-id"];
-          }
-        } else {
-          const now = new Date();
-          const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-          const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
-          secUrl = `https://www.minimaxi.com/backend/account/consumption_records?page_num=0&page_size=1&start_time_ms=${monthStart}&end_time_ms=${monthEnd}`;
-          secCookieStr = cookieStr;
-          secHeaders = headers;
-        }
-
-        const secUrlObj = new URL(secUrl);
-        const secQwid = inst.id + "_" + Date.now() + "_s";
-        const secBustUrl = new URL(secUrl);
-        secBustUrl.searchParams.set("_qwid", secQwid);
-        const secRuleId = 2;
-
-        // 清除残留规则后注册
-        const secAllRules = await chrome.declarativeNetRequest.getDynamicRules();
-        if (secAllRules.length > 0) {
-          await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: secAllRules.map((r) => r.id),
-          });
-        }
-
-        await chrome.declarativeNetRequest.updateDynamicRules({
-          removeRuleIds: [secRuleId],
-          addRules: [{
-            id: secRuleId,
-            priority: 1,
-            action: {
-              type: "modifyHeaders",
-              requestHeaders: [
-                { header: "cookie", operation: "set", value: secCookieStr },
-              ],
-            },
-            condition: {
-              urlFilter: `_qwid=${secQwid}`,
-              resourceTypes: ["xmlhttprequest", "other"],
-            },
-          }],
-        });
-
-        try {
-          const secResp = await fetch(secBustUrl.toString(), { method: "GET", headers: secHeaders, cache: "no-store" });
-          if (secResp.ok) {
-            const secData = await secResp.json();
-            if (secData.records && secData.records.length > 0) {
-              result._planName = secData.records[0].item_name;
-            }
-          }
-        } finally {
-          await chrome.declarativeNetRequest.updateDynamicRules({
-            removeRuleIds: [secRuleId],
-          });
-        }
-      } catch (e) {
-        console.log("[QuotaWatcher] consumption_records fetch failed:", e.message);
-      }
-    }
-
-    return result;
-  } finally {
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [ruleId],
-    });
+  const resp = await fetchWithDnrCookie(tmpl.url, cookieStr, fetchOpts);
+  if (!resp.ok) {
+    const bodyText = await resp.text().catch(() => "");
+    throw new Error(`HTTP ${resp.status}: ${bodyText.substring(0, 200)}`);
   }
+  const result = await resp.json();
+
+  // chatgpt-codex: 额外获取 codex-reset.com 重置预测（公开 API，无需鉴权）
+  if (inst.type === "chatgpt-codex") {
+    try {
+      const forecastResp = await fetch(
+        "https://codex-reset.com/api/forecast?tz=Asia%2FShanghai&locale=zh",
+        { headers: { accept: "application/json", referer: "https://codex-reset.com/zh/" } }
+      );
+      if (forecastResp.ok) {
+        result._resetForecast = await forecastResp.json();
+      }
+    } catch (e) {
+      console.log("[QuotaWatcher] forecast fetch failed:", e.message);
+    }
+  }
+
+  // minimax: 额外获取 consumption_records 查询套餐名
+  if (inst.type === "minimax") {
+    try {
+      let secUrl, secCookieStr, secHeaders;
+
+      if (inst.authMode === "manual" && inst.manualCurl2) {
+        const parsed2 = parseCurl(inst.manualCurl2);
+        secUrl = parsed2.url;
+        secCookieStr = parsed2.cookieStr;
+        secHeaders = { ...tmpl.headers };
+        if (parsed2.headers["x-group-id"]) {
+          secHeaders["x-group-id"] = parsed2.headers["x-group-id"];
+        }
+      } else {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
+        secUrl = `https://www.minimaxi.com/backend/account/consumption_records?page_num=0&page_size=1&start_time_ms=${monthStart}&end_time_ms=${monthEnd}`;
+        secCookieStr = cookieStr;
+        secHeaders = headers;
+      }
+
+      const secResp = await fetchWithDnrCookie(secUrl, secCookieStr, {
+        method: "GET",
+        headers: secHeaders,
+      });
+      if (secResp.ok) {
+        const secData = await secResp.json();
+        if (secData.records && secData.records.length > 0) {
+          result._planName = secData.records[0].item_name;
+        }
+      }
+    } catch (e) {
+      console.log("[QuotaWatcher] consumption_records fetch failed:", e.message);
+    }
+  }
+
+  return result;
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
