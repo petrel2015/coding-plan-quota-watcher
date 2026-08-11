@@ -5,9 +5,15 @@
   "description": "Chrome 扩展：统一查看多个 AI Coding Plan 的用量和刷新时间",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build": "vite build"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue2": "^2.3.4",
     "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "element-ui": "^2.15.14",
+    "vue": "^2.7.16"
   }
 }

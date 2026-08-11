@@ -9,5 +9,8 @@
 # Node (future use)
 node_modules/
 
+# Vite 构建产物
+dist/
+
 # Logs
 *.log

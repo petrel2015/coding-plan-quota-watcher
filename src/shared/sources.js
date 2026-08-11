@@ -1,8 +1,7 @@
-// sources.js - 数据源模板与默认配置（单一来源）
-// 被 background.js（importScripts）、settings.js（<script>）、common.js（间接）共用
-// 末尾 UMD 导出：浏览器经典脚本挂全局 + node/vitest 通过 require 引用
+// ES module 版数据源模板，供 Vue 组件 / background import
+// 内容与根目录原 sources.js 保持一致，仅去掉 UMD 全局挂载改为 export
 
-const SOURCE_TEMPLATES = {
+export const SOURCE_TEMPLATES = {
   "volcengine-ark": {
     name: "火山方舟 Agent Plan",
     type: "volcengine-ark",
@@ -104,10 +103,10 @@ const SOURCE_TEMPLATES = {
 };
 
 // 类型顺序（settings 下拉 / 默认配置用）
-const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm"];
+export const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm"];
 
 // 默认配置（首次安装时写入）
-const DEFAULT_INSTANCES = [
+export const DEFAULT_INSTANCES = [
   {
     id: "volcengine-ark-1",
     name: "火山方舟 #1",
@@ -136,7 +135,7 @@ const DEFAULT_INSTANCES = [
 
 // 迁移旧字段 manualCookie → manualCurl（纯函数，可被测试）
 // 返回 { instances, changed }；不修改入参，返回新数组
-function migrateInstances(inputInstances) {
+export function migrateInstances(inputInstances) {
   const instances = (inputInstances || []).map((inst) => ({ ...inst }));
   let changed = false;
   for (const inst of instances) {
@@ -149,13 +148,11 @@ function migrateInstances(inputInstances) {
   return { instances, changed };
 }
 
-// UMD 导出：node/vitest 用 require，浏览器经典脚本挂全局
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { SOURCE_TEMPLATES, SOURCE_ORDER, DEFAULT_INSTANCES, migrateInstances };
-}
-if (typeof globalThis !== "undefined") {
-  globalThis.SOURCE_TEMPLATES = SOURCE_TEMPLATES;
-  globalThis.SOURCE_ORDER = SOURCE_ORDER;
-  globalThis.DEFAULT_INSTANCES = DEFAULT_INSTANCES;
-  globalThis.migrateInstances = migrateInstances;
+// 生成新增数据源的默认名字："coding plan" → "coding plan #2" → "#3"...
+export function generateInstanceName(existingInstances) {
+  const baseName = "coding plan";
+  const dupCount = (existingInstances || []).filter(
+    (i) => i.name === baseName || (i.name && i.name.startsWith(baseName + " #"))
+  ).length;
+  return dupCount === 0 ? baseName : `${baseName} #${dupCount + 1}`;
 }

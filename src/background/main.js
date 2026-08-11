@@ -1,8 +1,8 @@
-// background.js - Service Worker
+// background.js - Service Worker（ES module）
 // 从 storage 读取实例配置，动态拉取数据，缓存到 storage
-// 数据源模板从 sources.js 引入（单一来源，与 settings.js 共用）
+// 数据源模板从 shared/sources.js 引入（单一来源，与 Vue 组件共用）
 
-importScripts("sources.js");
+import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances } from "../shared/sources.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;

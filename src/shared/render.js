@@ -1,19 +1,10 @@
-// render.js - 共享渲染逻辑（dashboard 页面用）
-
-// HTML 转义，防止用户/API 返回的内容注入
-function escapeHtml(s) {
-  if (s == null) return "";
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+// 归一化逻辑（从 render.js 抽取，ES module）
+// 依赖 format.js 的 formatNum / pad
+import { formatNum, pad } from "./format.js";
 
 // 将各数据源的原始 API 返回归一化为统一结构
 // 返回: { planType, windows: [{label, usedPct, detail, resetMs, startMs}], extras: [{label, value}] }
-function normalizeData(type, data) {
+export function normalizeData(type, data) {
   if (type === "volcengine-ark") {
     const result = data.Result;
     if (!result) return null;
@@ -212,122 +203,38 @@ function normalizeData(type, data) {
   return null;
 }
 
-// 渲染单个窗口块（统一结构：进度条 + 详情行 + 消耗预测 + 重置倒计时）
-function renderWindowHtml(win) {
+// 计算单个窗口的消耗速度预测文本（null 表示无预测）
+// 返回 { text, level } level: "ok" | "warn" | null
+export function computeForecast(win) {
   const pct = win.usedPct || 0;
-  const barClass = pct >= 90 ? "bar-danger" : pct >= 70 ? "bar-warn" : "bar-ok";
-  const resetInMs = win.resetMs - Date.now();
-  const isReset = resetInMs <= 0;
-  const detail = win.detail ? escapeHtml(win.detail) : "&nbsp;";
-  const resetStr = win.resetMs
-    ? (isReset ? "已重置" : `重置倒计时 ${formatCountdown(resetInMs)}`)
-    : "&nbsp;";
-
-  // 消耗速度预测
-  let forecastHtml = "";
-  if (win.startMs && win.resetMs) {
-    if (pct >= 100) {
-      forecastHtml = `<div class="window-forecast forecast-warn">额度已用完，等待重置</div>`;
-    } else if (pct === 0) {
-      forecastHtml = `<div class="window-forecast forecast-ok">暂无消耗，可用到重置</div>`;
-    } else {
-      const now = Date.now();
-      const elapsedMs = now - win.startMs;
-      const totalMs = win.resetMs - win.startMs;
-      if (elapsedMs > 60000 && totalMs > 0) {
-        // 按当前消耗速度，剩余额度能撑多久
-        const remainingPct = 100 - pct;
-        const consumeRatePerMs = pct / elapsedMs;
-        const expectLastMs = remainingPct / consumeRatePerMs;
-        const expectEndMs = now + expectLastMs;
-        const expectDate = new Date(expectEndMs);
-        const expectStr = `${expectDate.getMonth() + 1}月${expectDate.getDate()}日 ${pad(expectDate.getHours())}:${pad(expectDate.getMinutes())}`;
-
-        const windowEndMs = win.resetMs;
-        if (expectEndMs >= windowEndMs) {
-          forecastHtml = `<div class="window-forecast forecast-ok">按当前速度可用到重置</div>`;
-        } else {
-          const shortageMs = windowEndMs - expectEndMs;
-          const shortageStr = formatDuration(shortageMs);
-          forecastHtml = `<div class="window-forecast forecast-warn">预计 ${expectStr} 用尽，比重置早 ${shortageStr}</div>`;
-        }
-      }
-    }
+  if (!win.startMs || !win.resetMs) return null;
+  if (pct >= 100) return { text: "额度已用完，等待重置", level: "warn" };
+  if (pct === 0) return { text: "暂无消耗，可用到重置", level: "ok" };
+  const now = Date.now();
+  const elapsedMs = now - win.startMs;
+  const totalMs = win.resetMs - win.startMs;
+  if (elapsedMs <= 60000 || totalMs <= 0) return null;
+  // 按当前消耗速度，剩余额度能撑多久
+  const remainingPct = 100 - pct;
+  const consumeRatePerMs = pct / elapsedMs;
+  const expectLastMs = remainingPct / consumeRatePerMs;
+  const expectEndMs = now + expectLastMs;
+  // 动态 import formatDuration 不现实，这里内联简单实现
+  const fmtDur = (ms) => {
+    if (ms <= 0) return "0分";
+    const totalSec = Math.floor(ms / 1000);
+    const dd = Math.floor(totalSec / 86400);
+    const hh = Math.floor((totalSec % 86400) / 3600);
+    const mm = Math.floor((totalSec % 3600) / 60);
+    if (dd > 0) return `${dd}天${hh}时${mm}分`;
+    if (hh > 0) return `${hh}时${mm}分`;
+    return `${mm}分`;
+  };
+  const d = new Date(expectEndMs);
+  const expectStr = `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (expectEndMs >= win.resetMs) {
+    return { text: "按当前速度可用到重置", level: "ok" };
   }
-
-  return `
-    <div class="window">
-      <div class="window-header">
-        <span class="window-label">${escapeHtml(win.label)}</span>
-        <span class="window-used">${pct.toFixed(1)}%</span>
-      </div>
-      <div class="progress-bar">
-        <div class="progress-fill ${barClass}" style="width: ${Math.min(pct, 100)}%"></div>
-      </div>
-      <div class="window-detail">${detail}</div>
-      ${forecastHtml}
-      <div class="window-footer">
-        <span class="reset-time ${isReset ? "reset-done" : ""}">${resetStr}</span>
-      </div>
-    </div>
-  `;
-}
-
-// 渲染卡片底部 extras（有数据的才显示，无数据跳过）
-function renderExtrasHtml(extras) {
-  if (!extras || extras.length === 0) return "";
-  return extras
-    .filter((ex) => ex.value != null)
-    .map((ex) => `<div class="window-detail">${escapeHtml(ex.label)}: ${escapeHtml(ex.value)}</div>`)
-    .join("");
-}
-
-function formatNum(n) {
-  if (n >= 10000) return (n / 10000).toFixed(2) + "万";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return n.toFixed(1);
-}
-
-function formatTime(ts) {
-  if (!ts) return "-";
-  const d = new Date(ts);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function formatCountdown(ms) {
-  if (ms <= 0) return "已重置";
-  const totalSec = Math.floor(ms / 1000);
-  const dd = Math.floor(totalSec / 86400);
-  const hh = Math.floor((totalSec % 86400) / 3600);
-  const mm = Math.floor((totalSec % 3600) / 60);
-  const ss = totalSec % 60;
-  const t = new Date(Date.now() + ms);
-  const dateStr = `${t.getMonth() + 1}月${t.getDate()}日 ${pad(t.getHours())}:${pad(t.getMinutes())}`;
-  let dur;
-  if (dd > 0) dur = `${dd}天${hh}时${mm}分`;
-  else if (hh > 0) dur = `${hh}时${mm}分`;
-  else if (mm > 0) dur = `${mm}分${ss}秒`;
-  else dur = `${ss}秒`;
-  return `${dur} · ${dateStr}`;
-}
-
-// 只返回时长，不带日期
-function formatDuration(ms) {
-  if (ms <= 0) return "0分";
-  const totalSec = Math.floor(ms / 1000);
-  const dd = Math.floor(totalSec / 86400);
-  const hh = Math.floor((totalSec % 86400) / 3600);
-  const mm = Math.floor((totalSec % 3600) / 60);
-  if (dd > 0) return `${dd}天${hh}时${mm}分`;
-  if (hh > 0) return `${hh}时${mm}分`;
-  return `${mm}分`;
-}
-
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-
-// UMD 导出：node/vitest 用 require，浏览器经典脚本挂全局
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = { normalizeData, escapeHtml, formatNum, formatCountdown, formatDuration, pad };
+  const shortageMs = win.resetMs - expectEndMs;
+  return { text: `预计 ${expectStr} 用尽，比重置早 ${fmtDur(shortageMs)}`, level: "warn" };
 }

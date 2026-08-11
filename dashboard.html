@@ -4,22 +4,11 @@
   <meta charset="UTF-8">
   <title>Coding Plan 用量监控</title>
   <link rel="stylesheet" href="common.css">
-  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="dist/assets/theme.css">
+  <link rel="stylesheet" href="dist/assets/dashboard.css">
 </head>
 <body>
-  <div class="topbar">
-    <h1>Coding Plan 用量监控</h1>
-    <div class="topbar-right">
-      <button id="settings-btn" class="btn">设置</button>
-      <button id="refresh-all-btn" class="btn btn-primary">全部刷新</button>
-    </div>
-  </div>
-  <div id="sources" class="sources-grid">
-    <div class="empty">加载中...</div>
-  </div>
-  <script src="render.js"></script>
-  <script src="sources.js"></script>
-  <script src="common.js"></script>
-  <script src="dashboard.js"></script>
+  <div id="app"></div>
+  <script type="module" src="dist/dashboard.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // render.test.js - normalizeData 各数据源归一化测试
 import { describe, it, expect } from "vitest";
-import { normalizeData } from "../render.js";
+import { normalizeData } from "../src/shared/render.js";
 
 describe("normalizeData - volcengine-ark", () => {
   it("归一化 5h/周/月三个窗口", () => {

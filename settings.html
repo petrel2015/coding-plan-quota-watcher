@@ -4,46 +4,11 @@
   <meta charset="UTF-8">
   <title>设置 - Coding Plan Quota Watcher</title>
   <link rel="stylesheet" href="common.css">
-  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="dist/assets/theme.css">
+  <link rel="stylesheet" href="dist/assets/settings.css">
 </head>
 <body>
-  <div class="topbar">
-    <h1>设置</h1>
-    <button id="back-btn">返回 Dashboard</button>
-  </div>
-  <div class="content">
-    <div class="section">
-      <div class="section-header">
-        <h2>显示设置</h2>
-      </div>
-      <div class="field-row">
-        <span class="field-label">每行列数</span>
-        <select id="cols-select" class="field-input" style="max-width:120px;">
-          <option value="1">1 个</option>
-          <option value="2">2 个</option>
-          <option value="3">3 个</option>
-        </select>
-      </div>
-      <div class="field-row">
-        <span class="field-label">主题</span>
-        <select id="theme-select" class="field-input" style="max-width:120px;">
-          <option value="auto">跟随系统</option>
-          <option value="light">浅色</option>
-          <option value="dark">深色</option>
-        </select>
-      </div>
-    </div>
-    <div class="section" style="margin-top:16px;">
-      <div class="section-header">
-        <h2>数据源</h2>
-        <button id="add-btn">+ 新增</button>
-      </div>
-      <div id="instances"></div>
-    </div>
-  </div>
-  <script src="sources.js"></script>
-  <script src="render.js"></script>
-  <script src="common.js"></script>
-  <script src="settings.js"></script>
+  <div id="app"></div>
+  <script type="module" src="dist/settings.js"></script>
 </body>
 </html>
