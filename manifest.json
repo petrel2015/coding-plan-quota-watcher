@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Coding Plan Quota Watcher",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "统一查看多个 AI Coding Plan 的用量和刷新时间",
-  "permissions": ["cookies", "storage", "alarms", "declarativeNetRequest"],
+  "permissions": [
+    "cookies",
+    "storage",
+    "alarms",
+    "declarativeNetRequest"
+  ],
   "host_permissions": [
     "https://*.volcengine.com/*",
     "https://*.minimaxi.com/*",
@@ -25,8 +30,14 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["dashboard.html", "settings.html", "dist/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "dashboard.html",
+        "settings.html",
+        "dist/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

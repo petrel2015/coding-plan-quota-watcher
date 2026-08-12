@@ -40,33 +40,57 @@ npm run build        # 打包到 dist/（settings/dashboard/background + Element
 4. 扩展图标会出现在工具栏，**点击图标直接打开 Dashboard 面板**
 
 > 改代码后只需 `npm run build` 再到 `chrome://extensions` 点扩展卡片上的「刷新」按钮即可。
+> `build` 会自动先跑 `sync-version`（见下节），保证 manifest.json 版本号与 package.json 一致。
 
-## 打包成 Chrome 扩展（.crx / 发布）
+## 版本号管理
 
-### 方式一：打包成 .crx 文件（Chrome 内置）
+**单一真源**：`package.json` 的 `version` 字段。`manifest.json` 的 `version` 由脚本 `scripts/sync-version.mjs` 自动同步，**不要手动改 manifest.json 的版本号**。
 
-1. 确认已完成 `npm run build`，`dist/` 目录存在
+发版推荐用 npm 内置命令（会同时改 package.json + 打 git tag）：
+
+```bash
+npm version patch   # 1.7.0 → 1.7.1（bug 修复）
+npm version minor   # 1.7.0 → 1.8.0（新功能）
+npm version major   # 1.7.0 → 2.0.0（破坏性变更）
+```
+
+`npm version` 执行时会先跑测试（`preversion` 钩子），通过后才改版本号并提交 + 打 tag。改完后用 `npm run package`（见下）产出该版本的 zip，然后 `git push --tags` 推 tag。
+
+> 手动改版本号也可以，但改完 `package.json` 后务必跑 `npm run sync-version` 同步到 manifest.json；`npm run build` / `package` 也会自动同步。
+
+## 打包成 Chrome 扩展
+
+### 方式一：一键打包 zip（推荐）
+
+```bash
+npm run package
+```
+
+一条命令完成：同步版本号 → `vite build` → 打 zip 到 `releases/`。产物：
+
+```
+releases/coding-plan-quota-watcher-<version>.zip
+```
+
+zip 内容是**可加载的最小扩展包**（`manifest.json` + `dist/` 产物 + `icons/` + `*.html` + `common.css` + `README.md`），自动排除 `node_modules/`、`.git/`、`src/`、`test/`、`*.pem`、`*.crx` 等开发文件。跨平台：macOS/Linux 用系统 `zip`，Windows 用自带的 `tar`。
+
+**安装这个 zip**：
+
+- **开发者模式加载**（内部/小范围分发）：解压 zip → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选解压后的目录。
+- **上架 Chrome 应用商店**：访问 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/)，直接上传该 zip，填写商店信息后提交审核。
+
+### 方式二：打包成 .crx（Chrome 内置，需私钥）
+
+适合需要 `.crx` 二进制分发、且有固定私钥的场景：
+
+1. 先 `npm run build`（确保 `dist/` 最新）
 2. 打开 `chrome://extensions/`，开启「开发者模式」
 3. 点击「打包扩展程序」
 4. **扩展程序根目录**：填项目根目录路径（含 manifest.json 的目录，不是 dist/）
-5. **私钥文件**：首次留空，Chrome 会自动生成 `key.pem`（妥善保管，后续更新要用同一个）
+5. **私钥文件**：首次留空，Chrome 自动生成 `key.pem`（妥善保管，后续更新必须用同一个）
 6. 点击「打包扩展程序」→ 在项目**上级目录**生成 `coding-plan-quota-watcher.crx` 和 `coding-plan-quota-watcher.pem`
 
 > ⚠️ `.pem` 是扩展的身份凭证，**务必保管好且不要提交到 git**（已在 .gitignore 排除）。丢了就无法给同一个扩展发布更新，Chrome 会视为新扩展。
-
-### 方式二：发布到 Chrome 应用商店
-
-1. `npm run build` 确保 dist 最新
-2. 将**整个项目根目录**（除 `node_modules/`、`.git/`、`*.pem`）打成 zip
-   ```bash
-   zip -r coding-plan-quota-watcher.zip . -x "node_modules/*" -x ".git/*" -x "*.pem" -x "test/*"
-   ```
-3. 访问 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/)，上传该 zip
-4. 填写商店信息后提交审核
-
-### 方式三：分发未打包版本（zip，需开发者模式安装）
-
-把项目根打成 zip（同方式二的 zip 命令），分发给用户。用户解压后在 `chrome://extensions` 以「加载已解压的扩展程序」方式安装。适合内部/小范围分发。
 
 ## 配置数据源
 
@@ -103,6 +127,9 @@ manifest.json          扩展清单（service_worker 指向 dist/background.js�
 vite.config.js         Vite 构建配置（multi-entry）
 common.css             共享设计 token（颜色/圆角/阴影，三档主题 CSS 变量）
 element-overrides.css  Element-UI 组件深色模式覆盖
+scripts/
+├── sync-version.mjs   版本号同步：package.json → manifest.json
+└── package.mjs        一键打包：sync-version + build + zip → releases/
 src/
 ├── settings/          settings 页（Vue 2 + Element-UI）
 │   ├── main.js        Vue 入口
@@ -122,6 +149,7 @@ src/
 dashboard.html / settings.html  页面入口（引用 dist 产物）
 test/                  单元测试（vitest）
 dist/                  构建产物（gitignore，需 npm run build 生成）
+releases/              打包产物（gitignore，npm run package 生成）
 ```
 
 ### 开发流程
