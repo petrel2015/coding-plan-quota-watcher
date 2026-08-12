@@ -15,7 +15,7 @@
         :key="inst.id"
         :inst="inst"
         :data="dataMap[inst.id]"
-        :loading="refreshingIds.has(inst.id) || refreshingAll"
+        :loading="refreshingIds.has(inst.id)"
         :now="now"
         @refresh-one="refreshOne"
       />
@@ -125,12 +125,15 @@ export default {
     async refreshAll() {
       if (this.refreshingAll) return;
       this.refreshingAll = true;
+      // 所有 enabled 卡片各自进入独立 loading（蒙层），而非全局统一灰化
+      this.refreshingIds = new Set(this.enabledInstances.map((i) => i.id));
       try {
         await chrome.runtime.sendMessage({ action: "refresh" });
       } catch (e) {
         console.error("[QuotaWatcher] refreshAll failed:", e);
       } finally {
         this.refreshingAll = false;
+        this.refreshingIds = new Set();
       }
     },
     async refreshOne(instanceId) {

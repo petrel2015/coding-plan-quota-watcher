@@ -8,6 +8,16 @@
   /* Element-UI 主色对齐到项目的 accent 蓝 */
   --el-color-primary: #3b82f6;
 }
+/* loading 蒙层：浅色下用淡灰半透明，比默认纯白更通透 */
+.el-loading-mask {
+  background-color: rgba(248, 250, 252, 0.7);
+}
+.el-loading-spinner .path {
+  stroke: var(--color-accent);
+}
+.el-loading-spinner .el-loading-text {
+  color: var(--color-text-secondary);
+}
 
 /* ---------- 深色模式：显式 dark ---------- */
 :root[data-theme="dark"] {
@@ -116,8 +126,14 @@
   }
 
   /* loading 态 */
+  .el-loading-mask {
+    background-color: rgba(15, 23, 42, 0.6);
+  }
   .el-loading-spinner .path {
     stroke: var(--color-accent);
+  }
+  .el-loading-spinner .el-loading-text {
+    color: var(--color-text-secondary);
   }
 
   /* message（el-message，如用得到） */
@@ -229,8 +245,14 @@
       border-bottom-color: var(--color-text);
     }
 
+    .el-loading-mask {
+      background-color: rgba(15, 23, 42, 0.6);
+    }
     .el-loading-spinner .path {
       stroke: var(--color-accent);
+    }
+    .el-loading-spinner .el-loading-text {
+      color: var(--color-text-secondary);
     }
     .el-message {
       background-color: var(--color-card);

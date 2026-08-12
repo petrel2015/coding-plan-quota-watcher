@@ -1,5 +1,5 @@
 <template>
-  <div class="source-card" :class="{ 'card-loading': loading }">
+  <div class="source-card" v-loading="loading" element-loading-text="刷新中">
     <!-- header：名称 + planType 徽章 + 刷新控件 -->
     <div class="source-header">
       <div class="source-title">
@@ -265,23 +265,5 @@ export default {
   border-radius: var(--radius-btn);
   padding: 5px 9px;
   margin-bottom: 10px;
-}
-.card-loading {
-  opacity: 0.7;
-}
-.card-loading::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 2px;
-  width: 30%;
-  background: var(--color-accent);
-  border-radius: 2px;
-  animation: card-loading-slide 1.1s ease-in-out infinite;
-}
-@keyframes card-loading-slide {
-  0% { left: -30%; }
-  100% { left: 100%; }
 }
 </style>
