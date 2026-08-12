@@ -121,6 +121,8 @@ export default {
       localType: this.inst.type,
       localCurl: this.inst.manualCurl || this.inst.manualCookie || "",
       localCurl2: this.inst.manualCurl2 || "",
+      // 鉴权模式本地编辑态（v-model 绑它；锁定时 effectiveAuthMode 强制 manual）
+      localAuthMode: this.inst.authMode || "manual",
       // 用户是否手动改过名：false=名字跟随类型自动生成，true=类型变化时保持不动
       localNameCustomized: this.inst.nameCustomized === true,
     };
@@ -137,17 +139,9 @@ export default {
         (o, idx) => idx < myIdx && o.type === this.localType && o.authMode === "local"
       );
     },
-    effectiveAuthMode: {
-      get() {
-        // 锁定时强制 manual
-        return this.localLocked ? "manual" : this.inst.authMode;
-      },
-      // 锁定态下 el-select 仍可能把值写成 local（option 上的禁用不阻止点击），
-      // 这里立刻拉回 manual，交给 onAuthChange 弹 toast 说明原因
-      set(val) {
-        if (this.localLocked && val === "local") return;
-        // 非锁定态：由 onAuthChange 负责把新值同步到父组件并写回 inst.authMode
-      },
+    effectiveAuthMode() {
+      // 锁定时强制 manual；否则用本地编辑态
+      return this.localLocked ? "manual" : this.localAuthMode;
     },
     curlPlaceholder() {
       return this.template?.curlHint || "粘贴完整 curl 命令";
@@ -190,9 +184,14 @@ export default {
         this.localType = newVal.type;
         this.localCurl = newVal.manualCurl || newVal.manualCookie || "";
         this.localCurl2 = newVal.manualCurl2 || "";
+        this.localAuthMode = newVal.authMode || "manual";
         this.localNameCustomized = newVal.nameCustomized === true;
       },
       deep: true,
+    },
+    // 锁定态变化时（如上方同类型卡改了 authMode），把本地态同步到锁定后的有效值
+    localLocked() {
+      this.localAuthMode = this.effectiveAuthMode;
     },
   },
   methods: {
@@ -231,10 +230,11 @@ export default {
     onNameBlur() {
       this.onFieldChange();
     },
-    onAuthChange() {
-      // 锁定态下用户尝试切 local：effectiveAuthMode 的 setter 已把显示值拉回 manual，
-      // 这里弹 toast 把原因讲清楚（原本只闪一下没有任何提示）
-      if (this.localLocked) {
+    onAuthChange(newMode) {
+      // 锁定态下用户尝试切 local：显示值由 effectiveAuthMode 强制为 manual，
+      // 这里把被 v-model 写脏的 localAuthMode 还原，并弹 toast 说明原因（原本只闪一下无提示）
+      if (this.localLocked && newMode === "local") {
+        this.localAuthMode = "manual";
         this.$emit("auth-blocked", {
           id: this.inst.id,
           reason:
@@ -242,6 +242,7 @@ export default {
         });
         return;
       }
+      // 非锁定态：localAuthMode 已被 v-model 更新为 newMode，这里持久化即可
       this.$emit("update", this.collectFields(), { reloadAll: true, checkLogin: this.effectiveAuthMode === "local" });
     },
     onDelete() {

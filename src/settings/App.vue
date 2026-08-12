@@ -190,7 +190,7 @@ export default {
         name,
         type,
         enabled: true,
-        authMode: "manual",
+        authMode: "local",
         manualCurl: "",
         nameCustomized: false,
       };
