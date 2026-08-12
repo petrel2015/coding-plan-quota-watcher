@@ -31,6 +31,11 @@ import SourceCard from "./SourceCard.vue";
 import { migrateInstances } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
 
+// 手动刷新时每张卡的最小转圈时间，避免太快闪一下看不到（自动刷新不受影响）
+const MIN_LOADING_MS = 500;
+// loading 兜底超时：即使 background 完全无响应，也强制清掉转圈，防止永久卡住
+const LOADING_FALLBACK_TIMEOUT_MS = 30000;
+
 export default {
   name: "DashboardApp",
   components: { SourceCard },
@@ -39,8 +44,8 @@ export default {
       instances: [],
       dataMap: {}, // { [instanceId]: data }
       displayCols: 2,
-      refreshingAll: false,
-      refreshingIds: new Set(), // 注意：Set 需要用 Vue.set 重新赋值触发响应式
+      refreshingIds: new Set(), // 正在刷新的实例 id（注意：Set 需重新赋值触发响应式）
+      refreshStartTimes: {}, // { [instanceId]: startTimeMs }，用于 500ms 最小展示
       now: Date.now(),
       _tickTimer: null,
     };
@@ -48,6 +53,10 @@ export default {
   computed: {
     enabledInstances() {
       return this.instances.filter((i) => i.enabled);
+    },
+    // 「全部刷新」按钮 loading：有任何卡在转就 loading
+    refreshingAll() {
+      return this.refreshingIds.size > 0;
     },
   },
   async mounted() {
@@ -59,10 +68,17 @@ export default {
     this._tickTimer = setInterval(() => {
       this.now = Date.now();
     }, 15000);
+    // 进入 dashboard 立即刷新一次（从 settings 改完配置回来能马上看到最新数据）
+    this.refreshAll();
   },
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
     if (this._tickTimer) clearInterval(this._tickTimer);
+    if (this._fallbackTimers) {
+      for (const id of Object.keys(this._fallbackTimers)) {
+        clearTimeout(this._fallbackTimers[id]);
+      }
+    }
   },
   methods: {
     async loadAll() {
@@ -118,37 +134,69 @@ export default {
         const newDataMap = { ...this.dataMap };
         for (const [id, val] of Object.entries(dataUpdates)) {
           newDataMap[id] = val;
+          // 该实例后台已写入新数据 → 标记完成（逐卡停转圈）
+          this.markDone(id);
         }
         this.dataMap = newDataMap;
       }
     },
+    // 标记某实例开始刷新（记录开始时间，用于 500ms 最小展示）
+    markRefreshing(id) {
+      const newSet = new Set(this.refreshingIds);
+      newSet.add(id);
+      this.refreshingIds = newSet;
+      this.refreshStartTimes = { ...this.refreshStartTimes, [id]: Date.now() };
+      // 兜底：若迟迟没有 data_ 回写（background 卡死/无响应），强制清掉
+      if (this._fallbackTimers == null) this._fallbackTimers = {};
+      clearTimeout(this._fallbackTimers[id]);
+      this._fallbackTimers[id] = setTimeout(() => this.markDone(id), LOADING_FALLBACK_TIMEOUT_MS);
+    },
+    // 标记某实例完成：清 loading，但保证手动刷新至少展示 500ms
+    markDone(id) {
+      if (!this.refreshingIds.has(id)) return;
+      const start = this.refreshStartTimes[id];
+      const elapsed = start ? Date.now() - start : MIN_LOADING_MS;
+      const clear = () => {
+        const newSet = new Set(this.refreshingIds);
+        newSet.delete(id);
+        this.refreshingIds = newSet;
+        const ts = { ...this.refreshStartTimes };
+        delete ts[id];
+        this.refreshStartTimes = ts;
+        if (this._fallbackTimers && this._fallbackTimers[id]) {
+          clearTimeout(this._fallbackTimers[id]);
+          delete this._fallbackTimers[id];
+        }
+      };
+      if (elapsed >= MIN_LOADING_MS) {
+        clear();
+      } else {
+        // 不足 500ms：补足后再清（setTimeout 期间仍显示转圈）
+        setTimeout(clear, MIN_LOADING_MS - elapsed);
+      }
+    },
     async refreshAll() {
-      if (this.refreshingAll) return;
-      this.refreshingAll = true;
-      // 所有 enabled 卡片各自进入独立 loading（蒙层），而非全局统一灰化
-      this.refreshingIds = new Set(this.enabledInstances.map((i) => i.id));
+      // 防重入：已有任何卡在转时不重复触发
+      if (this.refreshingIds.size > 0) return;
+      // 所有 enabled 卡片各自进入独立 loading（蒙层）；逐张完成时由
+      // onStorageChanged → markDone 逐张停，不再等整个 sendMessage resolve。
+      for (const inst of this.enabledInstances) {
+        this.markRefreshing(inst.id);
+      }
       try {
         await chrome.runtime.sendMessage({ action: "refresh" });
       } catch (e) {
         console.error("[QuotaWatcher] refreshAll failed:", e);
-      } finally {
-        this.refreshingAll = false;
-        this.refreshingIds = new Set();
+        // 发送失败：兜底超时会清，这里不立即清，避免数据其实已更新的误清
       }
     },
     async refreshOne(instanceId) {
       if (this.refreshingIds.has(instanceId)) return;
-      const newSet = new Set(this.refreshingIds);
-      newSet.add(instanceId);
-      this.refreshingIds = newSet;
+      this.markRefreshing(instanceId);
       try {
         await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
       } catch (e) {
         console.error("[QuotaWatcher] refreshOne failed:", e);
-      } finally {
-        const doneSet = new Set(this.refreshingIds);
-        doneSet.delete(instanceId);
-        this.refreshingIds = doneSet;
       }
     },
     goSettings() {

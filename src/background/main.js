@@ -7,6 +7,8 @@ import { diagnoseError } from "../shared/diagnose.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
+// 单次请求超时：防止某请求挂起导致整条串行刷新链卡死、卡片永远转圈
+const FETCH_TIMEOUT_MS = 20000;
 
 // ------------------------------------------------------------
 // DNR（declarativeNetRequest）助手
@@ -64,7 +66,25 @@ async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
   });
 
   try {
-    return await fetch(bustUrl.toString(), { ...fetchOpts, cache: "no-store" });
+    // 超时保护：某请求挂起（网络半开/服务器不响应）时主动 abort，
+    // 否则会卡住整条串行刷新链，导致卡片永远转圈。
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      return await fetch(bustUrl.toString(), {
+        ...fetchOpts,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } catch (e) {
+      // AbortError 转成可读的超时错误，便于诊断归类
+      if (e && e.name === "AbortError") {
+        throw new Error(`请求超时（${FETCH_TIMEOUT_MS / 1000}s）`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   } finally {
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: [ruleId],

@@ -87,6 +87,23 @@ export function diagnoseError(err, options = {}) {
     };
   }
 
+  // —— 1b. 请求超时（fetchWithDnrCookie 的 AbortController 超时）——
+  if (/请求超时|timeout|timed?\s*out|aborterror/i.test(message)) {
+    const hosts = collectHosts(type, urls);
+    const detail =
+      hosts.length > 0
+        ? `请求 ${hosts.join(" / ")} 在超时时间内无响应`
+        : "请求在超时时间内无响应";
+    return {
+      category: "timeout",
+      title: "请求超时",
+      detail,
+      advice:
+        "目标站点响应过慢或连接被挂起。请检查网络是否稳定、代理是否正常；若持续超时，该平台可能临时不可达。",
+      authMode,
+    };
+  }
+
   // —— 2. csrfToken 缺失（仅 volcengine-ark，local/manual 各一条 message）——
   if (/csrftoken not found|curl 中未找到.*csrf/i.test(message)) {
     return {

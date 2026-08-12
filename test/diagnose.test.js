@@ -27,6 +27,23 @@ describe("diagnoseError - 网络类", () => {
   });
 });
 
+describe("diagnoseError - 超时", () => {
+  it("请求超时归 timeout 并提取 host", () => {
+    const d = diagnoseError("请求超时（20s）", {
+      type: "chatgpt-codex",
+      authMode: "local",
+    });
+    expect(d.category).toBe("timeout");
+    expect(d.title).toBe("请求超时");
+    expect(d.detail).toContain("chatgpt.com");
+  });
+
+  it("英文 timeout 也归 timeout", () => {
+    const d = diagnoseError("operation timed out", { type: "minimax" });
+    expect(d.category).toBe("timeout");
+  });
+});
+
 describe("diagnoseError - 鉴权过期（401）", () => {
   it("HTTP 401：local 模式建议重新登录", () => {
     const d = diagnoseError("HTTP 401: unauthorized", {
