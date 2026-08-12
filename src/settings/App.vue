@@ -45,10 +45,12 @@
             :index="idx"
             :last-index="instances.length - 1"
             :login-status="loginStatusMap"
+            :test-result="testResultMap"
             @update="onCardUpdate"
             @move="moveInstance"
             @delete="confirmDelete"
             @auth-blocked="onAuthBlocked"
+            @test-connection="testConnection"
           />
           <div v-if="instances.length === 0" class="empty">暂无数据源，点击新增添加</div>
         </div>
@@ -80,6 +82,7 @@ export default {
       displayCols: 2,
       theme: "auto",
       loginStatusMap: {}, // { [instanceId]: { state, count, message } }
+      testResultMap: {}, // { [instanceId]: { state: "testing"|"ok"|"fail", diag? } }
       toastVisible: false,
       toastMsg: "",
     };
@@ -182,6 +185,36 @@ export default {
     onAuthBlocked(payload) {
       if (payload?.reason) this.showToast(payload.reason, 4000);
     },
+    // 测试连接：把当前卡片最新字段发给 background 真实请求一次，结果写进 testResultMap
+    async testConnection(inst) {
+      if (!inst || !inst.id) return;
+      Vue.set(this.testResultMap, inst.id, { state: "testing" });
+      // manual 模式但没填 curl：直接本地报错，不发请求
+      if (inst.authMode === "manual" && !inst.manualCurl) {
+        Vue.set(this.testResultMap, inst.id, {
+          state: "fail",
+          diag: {
+            title: "缺少 cURL",
+            detail: "手动模式下必须粘贴 cURL 才能测试",
+            advice: "请从 DevTools → Network → Copy as cURL 复制后粘贴到上方输入框",
+          },
+        });
+        return;
+      }
+      try {
+        const resp = await chrome.runtime.sendMessage({ action: "testConnection", instance: inst });
+        if (resp && resp.ok) {
+          Vue.set(this.testResultMap, inst.id, { state: "ok" });
+        } else {
+          Vue.set(this.testResultMap, inst.id, { state: "fail", diag: (resp && resp.diag) || null });
+        }
+      } catch (e) {
+        Vue.set(this.testResultMap, inst.id, {
+          state: "fail",
+          diag: { title: "测试失败", detail: e.message || String(e), advice: "后台服务可能未就绪，请稍后重试" },
+        });
+      }
+    },
     async addInstance() {
       const type = "volcengine-ark";
       const name = generateInstanceName(type, this.instances);
@@ -194,7 +227,8 @@ export default {
         manualCurl: "",
         nameCustomized: false,
       };
-      this.instances.push(newInst);
+      // 加到最上面，避免新增后还要滚动到底部编辑
+      this.instances.unshift(newInst);
       await chrome.storage.local.set({ instances: this.instances });
     },
     async confirmDelete(instanceId, name) {

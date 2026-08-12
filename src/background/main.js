@@ -3,6 +3,7 @@
 // 数据源模板从 shared/sources.js 引入（单一来源，与 Vue 组件共用）
 
 import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances } from "../shared/sources.js";
+import { diagnoseError } from "../shared/diagnose.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
@@ -140,6 +141,16 @@ async function refreshOne(instanceId) {
   await serializeFetch(() => fetchAndStore(inst));
 }
 
+// 收集某数据源类型相关的候选 URL（用于网络错误时诊断出具体不通的域名）
+function collectUrlsForType(type) {
+  const tmpl = SOURCE_TEMPLATES[type];
+  if (!tmpl) return [];
+  const urls = [];
+  if (tmpl.tokenEndpoint) urls.push(tmpl.tokenEndpoint);
+  if (tmpl.url) urls.push(tmpl.url);
+  return urls;
+}
+
 // 实际获取数据并存入 storage
 async function fetchAndStore(inst) {
   try {
@@ -150,6 +161,7 @@ async function fetchAndStore(inst) {
         _fetchedAt: Date.now(),
         _error: null,
         _lastError: null,
+        _diag: null,
         _hasValidData: true,
         _name: inst.name,
         _type: inst.type,
@@ -158,6 +170,11 @@ async function fetchAndStore(inst) {
     console.log(`[QuotaWatcher] ${inst.id} OK`);
   } catch (err) {
     console.error(`[QuotaWatcher] ${inst.id} error:`, err);
+    const diag = diagnoseError(err, {
+      type: inst.type,
+      authMode: inst.authMode,
+      urls: collectUrlsForType(inst.type),
+    });
     const existing = await chrome.storage.local.get(`data_${inst.id}`);
     const oldData = existing[`data_${inst.id}`];
     if (oldData && oldData._hasValidData) {
@@ -165,6 +182,7 @@ async function fetchAndStore(inst) {
         [`data_${inst.id}`]: {
           ...oldData,
           _lastError: err.message,
+          _diag: diag,
         },
       });
       console.log(`[QuotaWatcher] ${inst.id} fetch failed, keeping last data`);
@@ -174,6 +192,7 @@ async function fetchAndStore(inst) {
           _fetchedAt: Date.now(),
           _error: err.message,
           _lastError: null,
+          _diag: diag,
           _hasValidData: false,
           _name: inst.name,
           _type: inst.type,
@@ -385,6 +404,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === "refreshOne") {
     refreshOne(msg.instanceId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  // 测试连接：用传入的 instance（含用户最新编辑）真实请求一次，
+  // 不写 storage（不污染缓存），只返回成功或结构化诊断结果。
+  if (msg.action === "testConnection") {
+    const inst = msg.instance;
+    if (!inst || !inst.id) {
+      sendResponse({ ok: false, diag: diagnoseError("未知数据源类型: (空)", { authMode: inst && inst.authMode }) });
+      return false;
+    }
+    serializeFetch(() => fetchInstance(inst))
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        const diag = diagnoseError(err, {
+          type: inst.type,
+          authMode: inst.authMode,
+          urls: collectUrlsForType(inst.type),
+        });
+        sendResponse({ ok: false, diag });
+      });
     return true;
   }
 });

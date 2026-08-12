@@ -22,12 +22,20 @@
       <div class="error-msg">暂无数据，点击刷新获取</div>
     </template>
     <template v-else-if="data._lastError">
-      <div class="fetch-warn">获取失败（{{ data._lastError }}），显示上次数据</div>
+      <div class="diag-block diag-warn">
+        <div class="diag-title">获取失败，显示上次数据 · {{ diag && diag.title }}</div>
+        <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
+        <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
+      </div>
       <div v-if="normalized" class="card-body" v-html="windowsHtml"></div>
       <div v-else class="error-msg">数据格式异常</div>
     </template>
     <template v-else-if="data._error && !data._hasValidData">
-      <div class="error-msg">{{ data._error }}</div>
+      <div class="diag-block diag-error">
+        <div class="diag-title">{{ diag && diag.title || "获取失败" }}</div>
+        <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
+        <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
+      </div>
     </template>
     <template v-else>
       <div v-if="normalized" class="card-body">
@@ -60,6 +68,7 @@
 <script>
 import { normalizeData, computeForecast } from "../shared/render.js";
 import { formatRelativeTime, formatCountdown, escapeHtml } from "../shared/format.js";
+import { diagnoseError } from "../shared/diagnose.js";
 
 export default {
   name: "SourceCard",
@@ -77,6 +86,17 @@ export default {
       } catch (e) {
         return null;
       }
+    },
+    // 失败诊断：优先用 background 写入的 _diag；老缓存没有时现场归类
+    diag() {
+      if (!this.data) return null;
+      const hasError = this.data._error || this.data._lastError;
+      if (!hasError) return null;
+      if (this.data._diag) return this.data._diag;
+      return diagnoseError(hasError, {
+        type: this.inst.type,
+        authMode: this.inst.authMode,
+      });
     },
     normalizedExtras() {
       if (!this.normalized || !this.normalized.extras) return [];
@@ -265,5 +285,39 @@ export default {
   border-radius: var(--radius-btn);
   padding: 5px 9px;
   margin-bottom: 10px;
+}
+/* 诊断块：失败时的「类别 + 详情 + 建议」三行结构 */
+.diag-block {
+  border-radius: var(--radius-btn);
+  padding: 7px 10px;
+  margin-bottom: 10px;
+  border-left-width: 3px;
+  border-left-style: solid;
+}
+.diag-warn {
+  background: var(--color-warn-bg);
+  border-color: var(--color-warn);
+}
+.diag-error {
+  background: var(--color-danger-bg);
+  border-color: var(--color-danger);
+}
+.diag-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.diag-warn .diag-title { color: var(--color-warn); }
+.diag-error .diag-title { color: var(--color-danger); }
+.diag-detail {
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  word-break: break-all;
+  margin-bottom: 2px;
+}
+.diag-advice {
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  line-height: 1.45;
 }
 </style>

@@ -97,6 +97,23 @@
         <div class="cookie-hint">{{ curl2Hint }}</div>
       </div>
     </div>
+
+    <!-- 测试连接：真实请求一次，验证鉴权/网络是否可用 -->
+    <div class="field-row test-row">
+      <span class="field-label">校验</span>
+      <div class="test-content">
+        <el-button
+          size="mini"
+          :disabled="testing"
+          @click="onTestConnection"
+        >{{ testing ? "测试中..." : "测试连接" }}</el-button>
+        <span v-if="testState === 'ok'" class="test-text test-ok">✓ 连接正常，可正常获取用量</span>
+        <template v-else-if="testState === 'fail' && testDiag">
+          <span class="test-text test-fail">{{ testDiag.title }}</span>
+          <span class="test-advice">{{ testDiag.advice }}</span>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -111,6 +128,7 @@ export default {
     index: { type: Number, default: 0 },
     lastIndex: { type: Number, default: 0 },
     loginStatus: { type: Object, default: () => ({}) },
+    testResult: { type: Object, default: () => ({}) },
   },
   data() {
     return {
@@ -173,6 +191,16 @@ export default {
     },
     loginMessage() {
       return this.loginStatus[this.inst.id]?.message || "";
+    },
+    // 测试连接结果（从父组件传入的 testResult map 读取）
+    testing() {
+      return this.testResult[this.inst.id]?.state === "testing";
+    },
+    testState() {
+      return this.testResult[this.inst.id]?.state || "";
+    },
+    testDiag() {
+      return this.testResult[this.inst.id]?.diag || null;
     },
   },
   watch: {
@@ -251,6 +279,10 @@ export default {
     openLogin() {
       const url = this.template?.loginUrl;
       if (url) chrome.tabs.create({ url });
+    },
+    // 测试连接：把当前卡片的最新字段（含本地编辑态）发给父组件，由父组件调 background 真实请求
+    onTestConnection() {
+      this.$emit("test-connection", this.collectFields());
     },
   },
 };
@@ -336,5 +368,25 @@ export default {
 }
 .manual-cookie2-row {
   margin-top: 8px;
+}
+/* 测试连接行 */
+.test-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.test-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+.test-ok { color: var(--color-ok); }
+.test-fail { color: var(--color-danger); }
+.test-advice {
+  font-size: 11.5px;
+  color: var(--color-text-tertiary);
+  line-height: 1.45;
+  flex-basis: 100%;
 }
 </style>
