@@ -12,5 +12,12 @@ node_modules/
 # Vite 构建产物
 dist/
 
+# Chrome 扩展打包私钥（身份凭证，切勿提交）
+*.pem
+
+# 打包产物
+*.crx
+*.zip
+
 # Logs
 *.log

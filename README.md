@@ -21,13 +21,52 @@
 - **自动刷新**：后台每 5 分钟拉取一次，也可手动单卡/全部刷新
 - **可调节列数**：Dashboard 支持 1/2/3 列布局
 
-## 安装
+## 安装（从源码构建加载）
 
-1. 下载本仓库代码
-2. 打开 Chrome，访问 `chrome://extensions/`
-3. 开启右上角「开发者模式」
-4. 点击「加载已解压的扩展程序」，选择本项目根目录
-5. 扩展图标会出现在工具栏，**点击图标直接打开 Dashboard 面板**
+本扩展使用 Vite 打包，MV3 禁止远程 CDN 脚本，因此必须先构建再加载。
+
+```bash
+git clone <仓库地址>
+cd coding-plan-quota-watcher
+npm install          # 安装依赖（Vue、Element-UI、Vite 等）
+npm run build        # 打包到 dist/（settings/dashboard/background + Element-UI CSS/字体）
+```
+
+构建完成后：
+
+1. 打开 Chrome，访问 `chrome://extensions/`
+2. 开启右上角「开发者模式」
+3. 点击「加载已解压的扩展程序」，**选择项目根目录**（不是 dist/，是整个项目根，manifest.json 所在处）
+4. 扩展图标会出现在工具栏，**点击图标直接打开 Dashboard 面板**
+
+> 改代码后只需 `npm run build` 再到 `chrome://extensions` 点扩展卡片上的「刷新」按钮即可。
+
+## 打包成 Chrome 扩展（.crx / 发布）
+
+### 方式一：打包成 .crx 文件（Chrome 内置）
+
+1. 确认已完成 `npm run build`，`dist/` 目录存在
+2. 打开 `chrome://extensions/`，开启「开发者模式」
+3. 点击「打包扩展程序」
+4. **扩展程序根目录**：填项目根目录路径（含 manifest.json 的目录，不是 dist/）
+5. **私钥文件**：首次留空，Chrome 会自动生成 `key.pem`（妥善保管，后续更新要用同一个）
+6. 点击「打包扩展程序」→ 在项目**上级目录**生成 `coding-plan-quota-watcher.crx` 和 `coding-plan-quota-watcher.pem`
+
+> ⚠️ `.pem` 是扩展的身份凭证，**务必保管好且不要提交到 git**（已在 .gitignore 排除）。丢了就无法给同一个扩展发布更新，Chrome 会视为新扩展。
+
+### 方式二：发布到 Chrome 应用商店
+
+1. `npm run build` 确保 dist 最新
+2. 将**整个项目根目录**（除 `node_modules/`、`.git/`、`*.pem`）打成 zip
+   ```bash
+   zip -r coding-plan-quota-watcher.zip . -x "node_modules/*" -x ".git/*" -x "*.pem" -x "test/*"
+   ```
+3. 访问 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/)，上传该 zip
+4. 填写商店信息后提交审核
+
+### 方式三：分发未打包版本（zip，需开发者模式安装）
+
+把项目根打成 zip（同方式二的 zip 命令），分发给用户。用户解压后在 `chrome://extensions` 以「加载已解压的扩展程序」方式安装。适合内部/小范围分发。
 
 ## 配置数据源
 
