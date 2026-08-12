@@ -56,39 +56,60 @@ describe("migrateInstances", () => {
 });
 
 describe("generateInstanceName", () => {
-  it("空列表返回基础名", () => {
-    expect(generateInstanceName([])).toBe("coding plan");
+  it("空列表返回该类型的模板名", () => {
+    expect(generateInstanceName("minimax", [])).toBe("MiniMax Token Plan");
   });
 
-  it("无重复时返回基础名", () => {
-    const instances = [{ id: "1", name: "火山方舟 #1" }];
-    expect(generateInstanceName(instances)).toBe("coding plan");
+  it("无同名时返回模板名", () => {
+    const instances = [{ id: "1", name: "火山方舟 Agent Plan" }];
+    expect(generateInstanceName("minimax", instances)).toBe("MiniMax Token Plan");
   });
 
-  it("已有一个同名时返回 #2", () => {
-    const instances = [{ id: "1", name: "coding plan" }];
-    expect(generateInstanceName(instances)).toBe("coding plan #2");
+  it("已有一个同名（模板名）时返回 #2", () => {
+    const instances = [{ id: "1", name: "MiniMax Token Plan" }];
+    expect(generateInstanceName("minimax", instances)).toBe("MiniMax Token Plan #2");
   });
 
   it("已有多个同名时递增编号", () => {
     const instances = [
-      { id: "1", name: "coding plan" },
-      { id: "2", name: "coding plan #2" },
-      { id: "3", name: "coding plan #3" },
+      { id: "1", name: "MiniMax Token Plan" },
+      { id: "2", name: "MiniMax Token Plan #2" },
+      { id: "3", name: "MiniMax Token Plan #3" },
     ];
-    expect(generateInstanceName(instances)).toBe("coding plan #4");
+    expect(generateInstanceName("minimax", instances)).toBe("MiniMax Token Plan #4");
   });
 
-  it("忽略不相关名字", () => {
+  it("不同类型的同名实例不计入该类型的重复", () => {
     const instances = [
-      { id: "1", name: "MiniMax #1" },
-      { id: "2", name: "智谱 GLM" },
+      { id: "1", name: "MiniMax Token Plan", type: "minimax" },
+      { id: "2", name: "智谱 GLM 用量", type: "zhipu-glm" },
     ];
-    expect(generateInstanceName(instances)).toBe("coding plan");
+    // 生成 zhipu-glm：已有 1 个同名 -> #2
+    expect(generateInstanceName("zhipu-glm", instances)).toBe("智谱 GLM 用量 #2");
+    // 生成 minimax：已有 1 个同名 -> #2
+    expect(generateInstanceName("minimax", instances)).toBe("MiniMax Token Plan #2");
+  });
+
+  it("excludeId 排除自身（类型变更重命名场景）", () => {
+    // 当前实例已是 "MiniMax Token Plan"，重算时不应把自己算进重复
+    const instances = [{ id: "me", name: "MiniMax Token Plan", type: "minimax" }];
+    expect(generateInstanceName("minimax", instances, "me")).toBe("MiniMax Token Plan");
+  });
+
+  it("excludeId 时其它同名仍计数", () => {
+    const instances = [
+      { id: "me", name: "MiniMax Token Plan", type: "minimax" },
+      { id: "other", name: "MiniMax Token Plan", type: "minimax" },
+    ];
+    expect(generateInstanceName("minimax", instances, "me")).toBe("MiniMax Token Plan #2");
+  });
+
+  it("未知类型回退到 coding plan", () => {
+    expect(generateInstanceName("unknown-type", [])).toBe("coding plan");
   });
 
   it("null/undefined 安全处理", () => {
-    expect(generateInstanceName(null)).toBe("coding plan");
-    expect(generateInstanceName(undefined)).toBe("coding plan");
+    expect(generateInstanceName("minimax", null)).toBe("MiniMax Token Plan");
+    expect(generateInstanceName("minimax", undefined)).toBe("MiniMax Token Plan");
   });
 });

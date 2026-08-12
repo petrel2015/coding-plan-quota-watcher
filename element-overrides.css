@@ -19,6 +19,19 @@
   color: var(--color-text-secondary);
 }
 
+/* select 下拉弹层动画修复
+   现象：el-select 展开时，dropdown 卡在 enter 动画初始帧（opacity:0 + scaleY(0)），
+   下拉项被 transform 压成 0 高度 —— 用户看到"闪一下就没了"，点不到任何选项
+   （表现为主题/类型/鉴权等所有 select 都"选了没反应"）。
+   根因：Vue 2.7 runtime 下 Element-UI 的 el-zoom-in-top transition 偶发不把
+   -enter 类替换成 -enter-active，两条规则的 opacity/transform 冲突，-enter 赢。
+   修复：强制 dropdown 始终可见、不缩放。失去 zoom 进出动画，但功能完全可用
+   （display 仍由 v-show 控制，关闭时正常 display:none）。 */
+.el-select-dropdown {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
 /* ---------- 深色模式：显式 dark ---------- */
 :root[data-theme="dark"] {
   /* 输入框 / 文本域 */

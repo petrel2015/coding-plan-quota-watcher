@@ -148,11 +148,14 @@ export function migrateInstances(inputInstances) {
   return { instances, changed };
 }
 
-// 生成新增数据源的默认名字："coding plan" → "coding plan #2" → "#3"...
-export function generateInstanceName(existingInstances) {
-  const baseName = "coding plan";
-  const dupCount = (existingInstances || []).filter(
-    (i) => i.name === baseName || (i.name && i.name.startsWith(baseName + " #"))
-  ).length;
-  return dupCount === 0 ? baseName : `${baseName} #${dupCount + 1}`;
+// 生成某个类型的新数据源默认名字：取该类型模板的 name 作 base，
+// 与现有同名实例去重："MiniMax Token Plan" → "MiniMax Token Plan #2" → "#3"...
+// excludeId 用于「类型变更时重命名」场景：重算时不把自己算进重复计数。
+export function generateInstanceName(type, existingInstances, excludeId) {
+  const tmpl = SOURCE_TEMPLATES[type];
+  const baseName = (tmpl && tmpl.name) || "coding plan";
+  const list = (existingInstances || []).filter(
+    (i) => i.id !== excludeId && (i.name === baseName || (i.name && i.name.startsWith(baseName + " #")))
+  );
+  return list.length === 0 ? baseName : `${baseName} #${list.length + 1}`;
 }

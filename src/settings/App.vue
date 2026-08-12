@@ -48,6 +48,7 @@
             @update="onCardUpdate"
             @move="moveInstance"
             @delete="confirmDelete"
+            @auth-blocked="onAuthBlocked"
           />
           <div v-if="instances.length === 0" class="empty">暂无数据源，点击新增添加</div>
         </div>
@@ -177,15 +178,21 @@ export default {
         });
       }
     },
+    // 锁定态下用户尝试切 local：弹出原因说明（替代原本"闪一下无提示"的行为）
+    onAuthBlocked(payload) {
+      if (payload?.reason) this.showToast(payload.reason, 4000);
+    },
     async addInstance() {
-      const name = generateInstanceName(this.instances);
+      const type = "volcengine-ark";
+      const name = generateInstanceName(type, this.instances);
       const newInst = {
         id: `${Date.now()}`,
         name,
-        type: "volcengine-ark",
+        type,
         enabled: true,
         authMode: "manual",
         manualCurl: "",
+        nameCustomized: false,
       };
       this.instances.push(newInst);
       await chrome.storage.local.set({ instances: this.instances });
@@ -220,13 +227,13 @@ export default {
     goBack() {
       window.location.href = "dashboard.html";
     },
-    showToast(msg) {
+    showToast(msg, duration = 2000) {
       this.toastMsg = msg;
       this.toastVisible = true;
       clearTimeout(this._toastTimer);
       this._toastTimer = setTimeout(() => {
         this.toastVisible = false;
-      }, 2000);
+      }, duration);
     },
   },
 };

@@ -1,17 +1,13 @@
 <template>
   <div class="instance-card" :class="{ disabled: !inst.enabled }">
-    <!-- 第一行：开关 + 名称 + 上移/下移/删除 -->
+    <!-- 第一行：开关 + 上移/下移/删除（名字移到「类型」下方独立一行） -->
     <div class="instance-row">
       <el-switch v-model="localEnabled" :disabled="false" @change="onFieldChange" />
-      <el-input
-        v-model="localName"
-        class="instance-name-input"
-        @blur="onFieldChange"
-        @change="onFieldChange"
-      />
-      <el-button size="mini" :disabled="index === 0" @click="$emit('move', inst.id, -1)">↑</el-button>
-      <el-button size="mini" :disabled="index === lastIndex" @click="$emit('move', inst.id, 1)">↓</el-button>
-      <el-button size="mini" type="danger" plain @click="onDelete">删除</el-button>
+      <div class="instance-row-actions">
+        <el-button size="mini" :disabled="index === 0" @click="$emit('move', inst.id, -1)">↑</el-button>
+        <el-button size="mini" :disabled="index === lastIndex" @click="$emit('move', inst.id, 1)">↓</el-button>
+        <el-button size="mini" type="danger" plain @click="onDelete">删除</el-button>
+      </div>
     </div>
 
     <!-- 类型 -->
@@ -22,7 +18,18 @@
       </el-select>
     </div>
 
-    <!-- 鉴权（锁定时用 el-tooltip 包裹，悬浮提示原因） -->
+    <!-- 名称（在类型下方；类型变化时若用户未手动改过名，则自动跟随重命名） -->
+    <div class="field-row">
+      <span class="field-label">名称</span>
+      <el-input
+        v-model="localName"
+        class="field-input instance-name-input"
+        @blur="onNameBlur"
+        @change="onNameChange"
+      />
+    </div>
+
+    <!-- 鉴权（锁定时用 el-tooltip 包裹，悬浮提示原因；锁定态下点击 local 会弹 toast 说明） -->
     <div class="field-row">
       <span class="field-label">鉴权</span>
       <el-tooltip
@@ -37,7 +44,7 @@
             class="field-input"
             @change="onAuthChange"
           >
-            <el-option label="本地 Cookie（自动）" value="local" :disabled="localLocked" />
+            <el-option label="本地 Cookie（自动）" value="local" />
             <el-option label="手动粘贴 Cookie" value="manual" />
           </el-select>
         </div>
@@ -94,7 +101,7 @@
 </template>
 
 <script>
-import { SOURCE_TEMPLATES } from "../shared/sources.js";
+import { SOURCE_TEMPLATES, generateInstanceName } from "../shared/sources.js";
 
 export default {
   name: "InstanceCard",
@@ -114,6 +121,8 @@ export default {
       localType: this.inst.type,
       localCurl: this.inst.manualCurl || this.inst.manualCookie || "",
       localCurl2: this.inst.manualCurl2 || "",
+      // 用户是否手动改过名：false=名字跟随类型自动生成，true=类型变化时保持不动
+      localNameCustomized: this.inst.nameCustomized === true,
     };
   },
   computed: {
@@ -128,9 +137,17 @@ export default {
         (o, idx) => idx < myIdx && o.type === this.localType && o.authMode === "local"
       );
     },
-    effectiveAuthMode() {
-      // 锁定时强制 manual
-      return this.localLocked ? "manual" : this.inst.authMode;
+    effectiveAuthMode: {
+      get() {
+        // 锁定时强制 manual
+        return this.localLocked ? "manual" : this.inst.authMode;
+      },
+      // 锁定态下 el-select 仍可能把值写成 local（option 上的禁用不阻止点击），
+      // 这里立刻拉回 manual，交给 onAuthChange 弹 toast 说明原因
+      set(val) {
+        if (this.localLocked && val === "local") return;
+        // 非锁定态：由 onAuthChange 负责把新值同步到父组件并写回 inst.authMode
+      },
     },
     curlPlaceholder() {
       return this.template?.curlHint || "粘贴完整 curl 命令";
@@ -173,6 +190,7 @@ export default {
         this.localType = newVal.type;
         this.localCurl = newVal.manualCurl || newVal.manualCookie || "";
         this.localCurl2 = newVal.manualCurl2 || "";
+        this.localNameCustomized = newVal.nameCustomized === true;
       },
       deep: true,
     },
@@ -188,15 +206,42 @@ export default {
         authMode: this.effectiveAuthMode,
         manualCurl: this.localCurl,
         manualCurl2: this.localCurl2,
+        nameCustomized: this.localNameCustomized,
       };
     },
     onFieldChange() {
       this.$emit("update", this.collectFields());
     },
+    // 类型变化：若用户未手动改过名（localNameCustomized=false），
+    // 名字自动跟随新类型重生成（如 MiniMax Token Plan → 智谱 GLM 用量 / #2）。
+    // 用户改过名则保持不变。
     onTypeChange() {
+      if (!this.localNameCustomized) {
+        this.localName = generateInstanceName(this.localType, this.allInstances, this.inst.id);
+      }
       this.$emit("update", this.collectFields(), { reloadAll: true });
     },
+    // 名称输入：用户手动改动后标记为已自定义，之后类型变化不再覆盖
+    onNameChange() {
+      // el-input @change 在内容相对上次确有变化时触发；置标志 + 持久化
+      this.localNameCustomized = true;
+      this.$emit("update", this.collectFields());
+    },
+    // blur：若用户没改过（change 未触发），仅持久化；与原来行为一致
+    onNameBlur() {
+      this.onFieldChange();
+    },
     onAuthChange() {
+      // 锁定态下用户尝试切 local：effectiveAuthMode 的 setter 已把显示值拉回 manual，
+      // 这里弹 toast 把原因讲清楚（原本只闪一下没有任何提示）
+      if (this.localLocked) {
+        this.$emit("auth-blocked", {
+          id: this.inst.id,
+          reason:
+            "同一平台已有数据源占用浏览器自动获取，本卡只能手动粘贴。如需本卡使用本地 Cookie，请把上方同平台的卡片改为手动，或调整顺序。",
+        });
+        return;
+      }
       this.$emit("update", this.collectFields(), { reloadAll: true, checkLogin: this.effectiveAuthMode === "local" });
     },
     onDelete() {
@@ -227,8 +272,10 @@ export default {
   gap: 10px;
   margin-bottom: 12px;
 }
-.instance-name-input {
-  flex: 1;
+.instance-row-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
 }
 .instance-name-input >>> .el-input__inner {
   font-weight: 600;
