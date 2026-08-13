@@ -1,6 +1,6 @@
 // diagnose.test.js - 错误诊断归类测试
 import { describe, it, expect } from "vitest";
-import { diagnoseError } from "../src/shared/diagnose.js";
+import { diagnoseError, isTerminalAuthDiag } from "../src/shared/diagnose.js";
 
 describe("diagnoseError - 网络类", () => {
   it("Failed to fetch 归类为 network，并从 urls 提取 host", () => {
@@ -149,6 +149,28 @@ describe("diagnoseError - 响应异常", () => {
     });
     expect(d.category).toBe("bad_response");
     expect(d.detail).toContain("非 JSON");
+  });
+});
+
+describe("isTerminalAuthDiag - 终态鉴权错误判定", () => {
+  it("auth_expired（登录失效）视为终态", () => {
+    expect(isTerminalAuthDiag({ category: "auth_expired" })).toBe(true);
+  });
+
+  it("auth_missing（凭证缺失）视为终态", () => {
+    expect(isTerminalAuthDiag({ category: "auth_missing" })).toBe(true);
+  });
+
+  it("瞬态错误（network/timeout/429/500 等）不视为终态", () => {
+    for (const c of ["network", "timeout", "forbidden", "rate_limited", "server_error", "bad_response", "unknown"]) {
+      expect(isTerminalAuthDiag({ category: c }), c).toBe(false);
+    }
+  });
+
+  it("null/undefined/空对象安全返回 false", () => {
+    expect(isTerminalAuthDiag(null)).toBe(false);
+    expect(isTerminalAuthDiag(undefined)).toBe(false);
+    expect(isTerminalAuthDiag({})).toBe(false);
   });
 });
 

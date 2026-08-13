@@ -5,7 +5,7 @@
       <h1>Coding Plan 用量监控</h1>
       <div class="topbar-right">
         <el-button @click="goSettings">设置</el-button>
-        <el-button type="primary" :loading="refreshingAll" @click="refreshAll">全部刷新</el-button>
+        <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">全部刷新</el-button>
       </div>
     </div>
 
@@ -33,6 +33,7 @@
 import SourceCard from "./SourceCard.vue";
 import { migrateInstances } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
+import { diagnoseError, isTerminalAuthDiag } from "../shared/diagnose.js";
 
 // 手动刷新时每张卡的最小转圈时间，避免太快闪一下看不到（自动刷新不受影响）
 const MIN_LOADING_MS = 500;
@@ -78,7 +79,8 @@ export default {
       this.now = Date.now();
     }, 15000);
     // 进入 dashboard 立即刷新一次（从 settings 改完配置回来能马上看到最新数据）
-    this.refreshAll();
+    // 自动刷新跳过已知登录失效的卡片，避免无意义的进度条闪烁
+    this.refreshAll(true);
   },
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
@@ -220,12 +222,28 @@ export default {
         setTimeout(clear, MIN_LOADING_MS - elapsed);
       }
     },
-    async refreshAll() {
+    // 该实例最近一次失败是否为「需要用户重新登录/补齐凭证」的终态错误：
+    // 这类错误重试不会自愈，自动刷新时不应再触发转圈（避免无意义的进度条闪烁）
+    isTerminalAuthError(inst) {
+      const data = this.dataMap[inst.id];
+      if (!data) return false;
+      const err = data._error || data._lastError;
+      if (!err) return false;
+      const diag = data._diag || diagnoseError(err, { type: inst.type, authMode: inst.authMode });
+      return isTerminalAuthDiag(diag);
+    },
+    async refreshAll(skipTerminal = false) {
       // 防重入：已有任何卡在转时不重复触发
       if (this.refreshingIds.size > 0) return;
+      // 自动刷新（打开 dashboard）时跳过已知登录失效的卡片：静态展示错误即可，
+      // 避免每次打开都闪进度条；手动「全部刷新」传 false，全部照常刷新。
+      let targets = this.enabledInstances;
+      if (skipTerminal) {
+        targets = targets.filter((inst) => !this.isTerminalAuthError(inst));
+      }
       // 所有 enabled 卡片各自进入独立 loading（蒙层）；逐张完成时由
       // onStorageChanged → markDone 逐张停，不再等整个 sendMessage resolve。
-      for (const inst of this.enabledInstances) {
+      for (const inst of targets) {
         this.markRefreshing(inst.id);
       }
       try {

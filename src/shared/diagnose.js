@@ -45,6 +45,12 @@ function collectHosts(type, urls) {
   return hosts;
 }
 
+// 是否为「需要用户重新登录/补齐凭证」的终态错误（auth_expired / auth_missing）：
+// 这类错误重试不会自愈，自动刷新时不应再触发转圈/进度条，静默展示错误即可。
+export function isTerminalAuthDiag(diag) {
+  return !!diag && (diag.category === "auth_expired" || diag.category === "auth_missing");
+}
+
 // 按 authMode 选「重新登录」还是「重新粘贴 cookie」的措辞
 function reauthAdvice(authMode, extra = "") {
   const base =
