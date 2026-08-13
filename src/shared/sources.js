@@ -1,9 +1,12 @@
 // ES module 版数据源模板，供 Vue 组件 / background import
-// 内容与根目录原 sources.js 保持一致，仅去掉 UMD 全局挂载改为 export
+// name / curlHint / curl2Hint 字段存的是 i18n key，调用方用 t() 翻译
+// （background 不用这些展示字段，故不受影响）
+
+import { t } from "./i18n.js";
 
 export const SOURCE_TEMPLATES = {
   "volcengine-ark": {
-    name: "火山方舟 Agent Plan",
+    name: "source.volcengine.name",
     type: "volcengine-ark",
     url: "https://console.volcengine.com/api/top/ark/cn-beijing/2024-01-01/GetAgentPlanAFPUsage?",
     method: "POST",
@@ -18,11 +21,11 @@ export const SOURCE_TEMPLATES = {
       "referer": "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
     },
     loginUrl: "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
-    curlHint: "DevTools -> Network -> 找 GetAgentPlanAFPUsage 请求 -> 右键 Copy as cURL",
+    curlHint: "source.volcengine.curlHint",
     curlHintUrl: "https://console.volcengine.com/ark/region:cn-beijing/subscription/agent-plan",
   },
   "minimax": {
-    name: "MiniMax Token Plan",
+    name: "source.minimax.name",
     type: "minimax",
     url: "https://www.minimaxi.com/backend/account/token_plan/remains_percent",
     method: "GET",
@@ -38,12 +41,12 @@ export const SOURCE_TEMPLATES = {
       "referer": "https://platform.minimaxi.com/",
     },
     loginUrl: "https://platform.minimaxi.com/login",
-    curlHint: "DevTools -> Network -> 找 remains_percent 请求 -> 右键 Copy as cURL",
+    curlHint: "source.minimax.curlHint",
     curlHintUrl: "https://platform.minimaxi.com/",
-    curl2Hint: "DevTools -> Network -> 找 consumption_records 请求 -> 右键 Copy as cURL（用于获取套餐名，可选）",
+    curl2Hint: "source.minimax.curl2Hint",
   },
   "chatgpt-codex": {
-    name: "ChatGPT Codex 用量",
+    name: "source.chatgpt.name",
     type: "chatgpt-codex",
     url: "https://chatgpt.com/backend-api/wham/usage",
     method: "GET",
@@ -71,11 +74,11 @@ export const SOURCE_TEMPLATES = {
       "referer": "https://chatgpt.com/",
     },
     loginUrl: "https://chatgpt.com/auth/login",
-    curlHint: "ChatGPT 设置页 Usage (Settings/Usage) -> DevTools -> Network -> 找 wham/usage 请求 -> 右键 Copy as cURL",
+    curlHint: "source.chatgpt.curlHint",
     curlHintUrl: "https://chatgpt.com/#settings/Usage",
   },
   "zhipu-glm": {
-    name: "智谱 GLM 用量",
+    name: "source.zhipu.name",
     type: "zhipu-glm",
     url: "https://bigmodel.cn/api/monitor/usage/quota/limit?type=1",
     method: "GET",
@@ -97,7 +100,7 @@ export const SOURCE_TEMPLATES = {
       "set-language": "zh",
     },
     loginUrl: "https://bigmodel.cn/coding-plan/personal/usage",
-    curlHint: "智谱开放平台 -> 个人中心 -> 额度用量 -> DevTools -> Network -> 找 quota/limit 请求 -> 右键 Copy as cURL",
+    curlHint: "source.zhipu.curlHint",
     curlHintUrl: "https://bigmodel.cn/coding-plan/personal/usage",
   },
 };
@@ -105,11 +108,17 @@ export const SOURCE_TEMPLATES = {
 // 类型顺序（settings 下拉 / 默认配置用）
 export const SOURCE_ORDER = ["volcengine-ark", "minimax", "chatgpt-codex", "zhipu-glm"];
 
-// 默认配置（首次安装时写入）
+// 数据源展示名（翻译 name key）；未知类型回退到 "coding plan"
+export function getSourceName(type) {
+  const tmpl = SOURCE_TEMPLATES[type];
+  return (tmpl && t(tmpl.name)) || "coding plan";
+}
+
+// 默认配置（首次安装时写入，按当前浏览器语言生成默认名）
 export const DEFAULT_INSTANCES = [
   {
     id: "volcengine-ark-1",
-    name: "火山方舟 #1",
+    name: `${t("source.volcengine.defaultName")} #1`,
     type: "volcengine-ark",
     enabled: true,
     authMode: "local",
@@ -117,7 +126,7 @@ export const DEFAULT_INSTANCES = [
   },
   {
     id: "minimax-1",
-    name: "MiniMax #1",
+    name: `${t("source.minimax.defaultName")} #1`,
     type: "minimax",
     enabled: true,
     authMode: "local",
@@ -125,7 +134,7 @@ export const DEFAULT_INSTANCES = [
   },
   {
     id: "zhipu-glm-1",
-    name: "智谱 GLM #1",
+    name: `${t("source.zhipu.defaultName")} #1`,
     type: "zhipu-glm",
     enabled: true,
     authMode: "local",
@@ -152,8 +161,7 @@ export function migrateInstances(inputInstances) {
 // 与现有同名实例去重："MiniMax Token Plan" → "MiniMax Token Plan #2" → "#3"...
 // excludeId 用于「类型变更时重命名」场景：重算时不把自己算进重复计数。
 export function generateInstanceName(type, existingInstances, excludeId) {
-  const tmpl = SOURCE_TEMPLATES[type];
-  const baseName = (tmpl && tmpl.name) || "coding plan";
+  const baseName = getSourceName(type);
   const list = (existingInstances || []).filter(
     (i) => i.id !== excludeId && (i.name === baseName || (i.name && i.name.startsWith(baseName + " #")))
   );

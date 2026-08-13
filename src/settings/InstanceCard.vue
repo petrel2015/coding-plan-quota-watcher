@@ -6,21 +6,21 @@
       <div class="instance-row-actions">
         <el-button size="mini" :disabled="index === 0" @click="$emit('move', inst.id, -1)">↑</el-button>
         <el-button size="mini" :disabled="index === lastIndex" @click="$emit('move', inst.id, 1)">↓</el-button>
-        <el-button size="mini" type="danger" plain @click="onDelete">删除</el-button>
+        <el-button size="mini" type="danger" plain @click="onDelete">{{ t('instance.delete') }}</el-button>
       </div>
     </div>
 
     <!-- 类型 -->
     <div class="field-row">
-      <span class="field-label">类型</span>
+      <span class="field-label">{{ t('instance.type') }}</span>
       <el-select v-model="localType" @change="onTypeChange" class="field-input">
-        <el-option v-for="(tmpl, key) in templates" :key="key" :label="tmpl.name" :value="key" />
+        <el-option v-for="(tmpl, key) in templates" :key="key" :label="t(tmpl.name)" :value="key" />
       </el-select>
     </div>
 
     <!-- 名称（在类型下方；类型变化时若用户未手动改过名，则自动跟随重命名） -->
     <div class="field-row">
-      <span class="field-label">名称</span>
+      <span class="field-label">{{ t('instance.name') }}</span>
       <el-input
         v-model="localName"
         class="field-input instance-name-input"
@@ -31,10 +31,10 @@
 
     <!-- 鉴权（锁定时用 el-tooltip 包裹，悬浮提示原因；锁定态下点击 local 会弹 toast 说明） -->
     <div class="field-row">
-      <span class="field-label">鉴权</span>
+      <span class="field-label">{{ t('instance.auth') }}</span>
       <el-tooltip
         :disabled="!localLocked"
-        content="同一平台已有数据源占用浏览器自动获取，本卡只能手动粘贴"
+        :content="t('instance.lockTip')"
         placement="top"
       >
         <div class="auth-select-wrapper">
@@ -44,8 +44,8 @@
             class="field-input"
             @change="onAuthChange"
           >
-            <el-option label="本地 Cookie（自动）" value="local" />
-            <el-option label="手动粘贴 Cookie" value="manual" />
+            <el-option :label="t('instance.authLocal')" value="local" />
+            <el-option :label="t('instance.authManual')" value="manual" />
           </el-select>
         </div>
       </el-tooltip>
@@ -53,15 +53,15 @@
 
     <!-- local 模式：登录态检测 -->
     <div v-if="effectiveAuthMode === 'local'" class="field-row login-status-row">
-      <span class="field-label">状态</span>
+      <span class="field-label">{{ t('instance.status') }}</span>
       <div class="login-status-content">
-        <span v-if="loginChecking" class="login-status-text login-checking">检测中...</span>
+        <span v-if="loginChecking" class="login-status-text login-checking">{{ t('instance.checking') }}</span>
         <span v-else-if="loginOk" class="login-status-text login-ok">
-          ✓ 已检测到登录信息（{{ loginCount }} 条 Cookie）
+          {{ t('instance.loginOk', { count: loginCount }) }}
         </span>
         <template v-else-if="loginMiss">
-          <span class="login-status-text login-miss">未检测到登录信息</span>
-          <el-button size="mini" type="primary" @click="openLogin">立即登录</el-button>
+          <span class="login-status-text login-miss">{{ t('instance.loginMiss') }}</span>
+          <el-button size="mini" type="primary" @click="openLogin">{{ t('instance.loginNow') }}</el-button>
         </template>
         <span v-else class="login-status-text login-unknown">{{ loginMessage }}</span>
       </div>
@@ -84,7 +84,7 @@
       <!-- minimax 的第二个 curl（套餐名） -->
       <div v-if="showCurl2" class="manual-cookie2-row">
         <div class="field-row">
-          <span class="field-label">curl2 (套餐名)</span>
+          <span class="field-label">{{ t('instance.curl2') }}</span>
         </div>
         <el-input
           v-model="localCurl2"
@@ -100,14 +100,14 @@
 
     <!-- 测试连接：真实请求一次，验证鉴权/网络是否可用 -->
     <div class="field-row test-row">
-      <span class="field-label">校验</span>
+      <span class="field-label">{{ t('instance.verify') }}</span>
       <div class="test-content">
         <el-button
           size="mini"
           :disabled="testing"
           @click="onTestConnection"
-        >{{ testing ? "测试中..." : "测试连接" }}</el-button>
-        <span v-if="testState === 'ok'" class="test-text test-ok">✓ 连接正常，可正常获取用量</span>
+        >{{ testing ? t('instance.testing') : t('instance.testConn') }}</el-button>
+        <span v-if="testState === 'ok'" class="test-text test-ok">{{ t('instance.testOk') }}</span>
         <template v-else-if="testState === 'fail' && testDiag">
           <span class="test-text test-fail">{{ testDiag.title }}</span>
           <span class="test-advice">{{ testDiag.advice }}</span>
@@ -119,6 +119,7 @@
 
 <script>
 import { SOURCE_TEMPLATES, generateInstanceName } from "../shared/sources.js";
+import { t } from "../shared/i18n.js";
 
 export default {
   name: "InstanceCard",
@@ -162,16 +163,20 @@ export default {
       return this.localLocked ? "manual" : this.localAuthMode;
     },
     curlPlaceholder() {
-      return this.template?.curlHint || "粘贴完整 curl 命令";
+      const k = this.template?.curlHint;
+      return k ? t(k) : t("instance.curlPlaceholder");
     },
     curlHint() {
-      return this.template?.curlHint || "从浏览器 DevTools -> Network -> 右键 Copy as cURL 粘贴到这里";
+      const k = this.template?.curlHint;
+      return k ? t(k) : t("instance.curlHintFallback");
     },
     curl2Placeholder() {
-      return this.template?.curl2Hint || "可选，粘贴第二个 curl 命令";
+      const k = this.template?.curl2Hint;
+      return k ? t(k) : t("instance.curl2Placeholder");
     },
     curl2Hint() {
-      return this.template?.curl2Hint || "";
+      const k = this.template?.curl2Hint;
+      return k ? t(k) : "";
     },
     showCurl2() {
       return this.localType === "minimax";
@@ -223,6 +228,7 @@ export default {
     },
   },
   methods: {
+    t,
     // 收集当前卡片的字段，emit 给父组件写 storage
     collectFields() {
       return {
@@ -265,8 +271,7 @@ export default {
         this.localAuthMode = "manual";
         this.$emit("auth-blocked", {
           id: this.inst.id,
-          reason:
-            "同一平台已有数据源占用浏览器自动获取，本卡只能手动粘贴。如需本卡使用本地 Cookie，请把上方同平台的卡片改为手动，或调整顺序。",
+          reason: t("instance.authBlockedReason"),
         });
         return;
       }

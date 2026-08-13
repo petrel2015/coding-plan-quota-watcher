@@ -1,6 +1,10 @@
 // 错误诊断（纯函数）：把 background fetch 抛出的原始 error 归类成结构化结果，
-// 供 dashboard / settings 展示中文化的「类别 + 详情 + 可操作建议」。
+// 供 dashboard / settings 展示「类别 + 详情 + 可操作建议」。
 // background 和前端共用，避免两处各写一套翻译。
+//
+// 注意：background 抛出的 Error.message 是给本函数归类的「协议串」，保持英文稳定，
+// 不做 i18n；本函数输出的 title/detail/advice 才走 i18n（按当前 locale 翻译）。
+// 平台响应 body（sliceBody 切出的原文）不翻译，原样展示。
 //
 // 入参：
 //   err      —— Error 对象 / string / { message }
@@ -13,6 +17,7 @@
 //   { category, title, detail, advice, authMode }
 
 import { SOURCE_TEMPLATES } from "./sources.js";
+import { t } from "./i18n.js";
 
 // 从 url 字符串提取 host（hostname），失败返回 null
 function hostOf(urlStr) {
@@ -51,13 +56,10 @@ export function isTerminalAuthDiag(diag) {
   return !!diag && (diag.category === "auth_expired" || diag.category === "auth_missing");
 }
 
-// 按 authMode 选「重新登录」还是「重新粘贴 cookie」的措辞
+// 按 authMode 选「重新登录」还是「重新粘贴 cookie」的措辞，可选拼接 extra 说明
 function reauthAdvice(authMode, extra = "") {
-  const base =
-    authMode === "manual"
-      ? "Cookie 已过期或不完整，请重新从 DevTools → Network → Copy as cURL 粘贴"
-      : "登录态已失效，请重新登录该平台";
-  return extra ? `${base}（${extra}）` : base;
+  const base = t(authMode === "manual" ? "diag.reauthManual" : "diag.reauthLocal");
+  return extra ? base + t("common.paren", { s: extra }) : base;
 }
 
 /**
@@ -76,67 +78,65 @@ export function diagnoseError(err, options = {}) {
           ? err.message
           : String(err);
 
-  // —— 1. 网络层失败：Failed to fetch（fetch API 抛的 TypeError）——
+  // —— 1. 网络层失败：Failed to fetch（fetch API 抛的 TypeError / Chrome 原生错误）——
   if (/failed to fetch|networkerror|load failed|err_(connection|name)_/i.test(message)) {
     const hosts = collectHosts(type, urls);
     const detail =
       hosts.length > 0
-        ? `无法访问 ${hosts.join(" / ")}（网络请求被拒绝）`
-        : "网络请求无法发出（可能断网或被拦截）";
+        ? t("diag.network.detailHost", { hosts: hosts.join(" / ") })
+        : t("diag.network.detailNoHost");
     return {
       category: "network",
-      title: "网络不通",
+      title: t("diag.network.title"),
       detail,
-      advice:
-        "请检查本机网络/代理能否打开该域名；公司内网、VPN 或代理可能拦截了对该站点的访问。",
+      advice: t("diag.network.advice"),
       authMode,
     };
   }
 
   // —— 1b. 请求超时（fetchWithDnrCookie 的 AbortController 超时）——
-  if (/请求超时|timeout|timed?\s*out|aborterror/i.test(message)) {
+  if (/timeout|timed?\s*out|aborterror/i.test(message)) {
     const hosts = collectHosts(type, urls);
     const detail =
       hosts.length > 0
-        ? `请求 ${hosts.join(" / ")} 在超时时间内无响应`
-        : "请求在超时时间内无响应";
+        ? t("diag.timeout.detailHost", { hosts: hosts.join(" / ") })
+        : t("diag.timeout.detailNoHost");
     return {
       category: "timeout",
-      title: "请求超时",
+      title: t("diag.timeout.title"),
       detail,
-      advice:
-        "目标站点响应过慢或连接被挂起。请检查网络是否稳定、代理是否正常；若持续超时，该平台可能临时不可达。",
+      advice: t("diag.timeout.advice"),
       authMode,
     };
   }
 
   // —— 2. csrfToken 缺失（仅 volcengine-ark，local/manual 各一条 message）——
-  if (/csrftoken not found|curl 中未找到.*csrf/i.test(message)) {
+  if (/csrf.*not\s*found|csrftoken not found/i.test(message)) {
     return {
       category: "auth_missing",
-      title: "缺少登录凭证",
-      detail: "未取到 csrfToken，请求无法通过平台鉴权",
+      title: t("diag.authMissing.title"),
+      detail: t("diag.authMissing.detail"),
       advice:
         authMode === "manual"
-          ? "cURL 不完整，请重新复制（需同时包含 cookie 与 x-csrf-token 头）"
-          : "未检测到该平台的登录 Cookie，请先登录火山方舟控制台",
+          ? t("diag.authMissing.adviceManual")
+          : t("diag.authMissing.adviceLocal"),
       authMode,
     };
   }
 
   // —— 3. ChatGPT accessToken 获取失败（session 失效）——
-  if (/无法从.*获取.*accesstoken|可能未登录/i.test(message)) {
+  if (/cannot get.*accesstoken|possibly not logged in/i.test(message)) {
     return {
       category: "auth_expired",
-      title: "ChatGPT 登录态失效",
-      detail: "无法从 /api/auth/session 取到 accessToken",
-      advice: reauthAdvice(authMode, "ChatGPT 会话已过期"),
+      title: t("diag.chatgptExpired.title"),
+      detail: t("diag.chatgptExpired.detail"),
+      advice: reauthAdvice(authMode, t("diag.chatgptExpired.extra")),
       authMode,
     };
   }
 
   // —— 4. Token 接口 HTTP xxx（ChatGPT session 接口返回非 2xx）——
-  const tokenStatusMatch = message.match(/token\s*接口\s*http\s*(\d+)/i);
+  const tokenStatusMatch = message.match(/token\s*endpoint\s*http\s*(\d+)/i);
 
   // —— 5. 通用 HTTP xxx: body ——
   const httpStatusMatch = tokenStatusMatch || message.match(/http\s*(\d+)/i);
@@ -146,8 +146,8 @@ export function diagnoseError(err, options = {}) {
     if (status === 401 || status === 419 || status === 440) {
       return {
         category: "auth_expired",
-        title: "登录已过期（401）",
-        detail: isTokenPhase ? "鉴权接口返回 401" : sliceBody(message),
+        title: t("diag.expired401.title"),
+        detail: isTokenPhase ? t("diag.expired401.detailToken") : sliceBody(message),
         advice: reauthAdvice(authMode),
         authMode,
       };
@@ -155,46 +155,45 @@ export function diagnoseError(err, options = {}) {
     if (status === 403) {
       return {
         category: "forbidden",
-        title: "无权限（403）",
-        detail: sliceBody(message) || "平台拒绝了该请求",
-        advice:
-          "账号可能没有该套餐权限，或鉴权已失效；尝试重新登录/刷新 Cookie，确认账号已开通对应套餐。",
+        title: t("diag.forbidden.title"),
+        detail: sliceBody(message) || t("diag.forbidden.detailFallback"),
+        advice: t("diag.forbidden.advice"),
         authMode,
       };
     }
     if (status === 404) {
       return {
         category: "bad_response",
-        title: "接口不存在（404）",
-        detail: "请求的用量接口返回 404",
-        advice: "数据源配置可能过时，或平台接口路径已变更。",
+        title: t("diag.notFound.title"),
+        detail: t("diag.notFound.detail"),
+        advice: t("diag.notFound.advice"),
         authMode,
       };
     }
     if (status === 429) {
       return {
         category: "rate_limited",
-        title: "请求过频（429）",
-        detail: "触发了平台限流",
-        advice: "稍后重试；如果频繁出现，请降低后台刷新频率。",
+        title: t("diag.rateLimit.title"),
+        detail: t("diag.rateLimit.detail"),
+        advice: t("diag.rateLimit.advice"),
         authMode,
       };
     }
     if (status >= 500 && status < 600) {
       return {
         category: "server_error",
-        title: `服务端异常（${status}）`,
-        detail: sliceBody(message) || "平台侧返回错误",
-        advice: "平台服务端故障，通常稍后重试即可恢复。",
+        title: t("diag.serverError.title", { status }),
+        detail: sliceBody(message) || t("diag.serverError.detailFallback"),
+        advice: t("diag.serverError.advice"),
         authMode,
       };
     }
     if (status >= 400 && status < 500) {
       return {
         category: "bad_response",
-        title: `请求被拒绝（${status}）`,
-        detail: sliceBody(message) || "平台返回了 4xx 错误",
-        advice: "请查看返回内容确认原因；常见为参数或鉴权问题。",
+        title: t("diag.badRequest.title", { status }),
+        detail: sliceBody(message) || t("diag.badRequest.detailFallback"),
+        advice: t("diag.badRequest.advice"),
         authMode,
       };
     }
@@ -204,20 +203,20 @@ export function diagnoseError(err, options = {}) {
   if (/unexpected token|json|is not valid json|syntaxerror/i.test(message) && /unexpected token|[a-z]+ is not valid json/i.test(message)) {
     return {
       category: "bad_response",
-      title: "响应格式异常",
-      detail: "平台返回了非 JSON 内容（可能是登录页重定向）",
-      advice: reauthAdvice(authMode, "通常是登录态失效"),
+      title: t("diag.badResponse.title"),
+      detail: t("diag.badResponse.detail"),
+      advice: reauthAdvice(authMode, t("diag.badResponse.extra")),
       authMode,
     };
   }
 
   // —— 7. 未知数据源类型（配置损坏）——
-  if (/未知数据源类型/i.test(message)) {
+  if (/unknown source type/i.test(message)) {
     return {
       category: "unknown",
-      title: "配置异常",
+      title: t("diag.unknown.title"),
       detail: message,
-      advice: "该数据源类型不被支持，可能配置已损坏，请删除后重新添加。",
+      advice: t("diag.unknown.advice"),
       authMode,
     };
   }
@@ -225,9 +224,9 @@ export function diagnoseError(err, options = {}) {
   // —— 8. 兜底 ——
   return {
     category: "unknown",
-    title: "获取失败",
-    detail: message || "未知错误",
-    advice: "请稍后重试；若持续失败，可点击「测试连接」查看具体原因。",
+    title: t("diag.fallback.title"),
+    detail: message || t("diag.fallback.detailFallback"),
+    advice: t("diag.fallback.advice"),
     authMode,
   };
 }

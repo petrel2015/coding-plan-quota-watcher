@@ -2,10 +2,10 @@
   <div>
     <!-- topbar -->
     <div class="topbar">
-      <h1>Coding Plan 用量监控</h1>
+      <h1>{{ t('dashboard.title') }}</h1>
       <div class="topbar-right">
-        <el-button @click="goSettings">设置</el-button>
-        <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">全部刷新</el-button>
+        <el-button @click="goSettings">{{ t('dashboard.settings') }}</el-button>
+        <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">{{ t('dashboard.refreshAll') }}</el-button>
       </div>
     </div>
 
@@ -23,7 +23,7 @@
         @retry="retry"
       />
       <div v-if="enabledInstances.length === 0" class="empty">
-        暂无启用的数据源，请到设置页面添加
+        {{ t('dashboard.empty') }}
       </div>
     </div>
   </div>
@@ -34,6 +34,7 @@ import SourceCard from "./SourceCard.vue";
 import { migrateInstances } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
 import { diagnoseError, isTerminalAuthDiag } from "../shared/diagnose.js";
+import { t, getLocale } from "../shared/i18n.js";
 
 // 手动刷新时每张卡的最小转圈时间，避免太快闪一下看不到（自动刷新不受影响）
 const MIN_LOADING_MS = 500;
@@ -70,6 +71,8 @@ export default {
     },
   },
   async mounted() {
+    document.title = t("doc.dashboardTitle");
+    document.documentElement.lang = getLocale();
     await applyTheme();
     await this.loadAll();
     // 监听 storage 变化
@@ -90,6 +93,7 @@ export default {
     }
   },
   methods: {
+    t,
     async loadAll() {
       const { instances: raw, displayCols, theme } = await chrome.storage.local.get([
         "instances",

@@ -2,30 +2,30 @@
   <div>
     <!-- topbar -->
     <div class="topbar">
-      <h1>设置</h1>
-      <el-button @click="goBack">返回 Dashboard</el-button>
+      <h1>{{ t('settings.title') }}</h1>
+      <el-button @click="goBack">{{ t('settings.back') }}</el-button>
     </div>
 
     <div class="content">
       <!-- 显示设置 -->
       <div class="section">
         <div class="section-header">
-          <h2>显示设置</h2>
+          <h2>{{ t('settings.display') }}</h2>
         </div>
         <div class="field-row">
-          <span class="field-label">每行列数</span>
+          <span class="field-label">{{ t('settings.cols') }}</span>
           <el-select v-model="displayCols" @change="onColsChange" style="width:120px;">
-            <el-option label="1 个" :value="1" />
-            <el-option label="2 个" :value="2" />
-            <el-option label="3 个" :value="3" />
+            <el-option :label="t('settings.colOne')" :value="1" />
+            <el-option :label="t('settings.colTwo')" :value="2" />
+            <el-option :label="t('settings.colThree')" :value="3" />
           </el-select>
         </div>
         <div class="field-row">
-          <span class="field-label">主题</span>
+          <span class="field-label">{{ t('settings.theme') }}</span>
           <el-select v-model="theme" @change="onThemeChange" style="width:120px;">
-            <el-option label="跟随系统" value="auto" />
-            <el-option label="浅色" value="light" />
-            <el-option label="深色" value="dark" />
+            <el-option :label="t('settings.themeAuto')" value="auto" />
+            <el-option :label="t('settings.themeLight')" value="light" />
+            <el-option :label="t('settings.themeDark')" value="dark" />
           </el-select>
         </div>
       </div>
@@ -33,8 +33,8 @@
       <!-- 数据源 -->
       <div class="section">
         <div class="section-header">
-          <h2>数据源</h2>
-          <el-button type="primary" @click="addInstance">+ 新增</el-button>
+          <h2>{{ t('settings.sources') }}</h2>
+          <el-button type="primary" @click="addInstance">{{ t('settings.add') }}</el-button>
         </div>
         <div id="instances">
           <InstanceCard
@@ -52,7 +52,7 @@
             @auth-blocked="onAuthBlocked"
             @test-connection="testConnection"
           />
-          <div v-if="instances.length === 0" class="empty">暂无数据源，点击新增添加</div>
+          <div v-if="instances.length === 0" class="empty">{{ t('settings.empty') }}</div>
         </div>
       </div>
     </div>
@@ -72,6 +72,7 @@ import {
   generateInstanceName,
 } from "../shared/sources.js";
 import { applyTheme, setThemeAttr } from "../shared/theme.js";
+import { t, getLocale } from "../shared/i18n.js";
 
 export default {
   name: "SettingsApp",
@@ -88,10 +89,13 @@ export default {
     };
   },
   async mounted() {
+    document.title = t("doc.settingsTitle");
+    document.documentElement.lang = getLocale();
     await applyTheme();
     await this.loadAll();
   },
   methods: {
+    t,
     async loadAll() {
       const { instances: raw, displayCols, theme } = await chrome.storage.local.get([
         "instances",
@@ -133,7 +137,7 @@ export default {
       Vue.set(this.loginStatusMap, inst.id, { state: "checking" });
       const tmpl = SOURCE_TEMPLATES[inst.type];
       if (!tmpl || !tmpl.cookieDomains) {
-        Vue.set(this.loginStatusMap, inst.id, { state: "unknown", message: "未知数据源" });
+        Vue.set(this.loginStatusMap, inst.id, { state: "unknown", message: t("settings.unknownSource") });
         return;
       }
       try {
@@ -159,7 +163,7 @@ export default {
       } catch (e) {
         Vue.set(this.loginStatusMap, inst.id, {
           state: "unknown",
-          message: `检测失败：${e.message}`,
+          message: t("settings.checkFailed", { msg: e.message }),
         });
       }
     },
@@ -170,7 +174,7 @@ export default {
       // 更新 instances 数组
       this.instances[idx] = { ...this.instances[idx], ...fields };
       await chrome.storage.local.set({ instances: this.instances });
-      this.showToast("已自动保存");
+      this.showToast(t("settings.saved"));
       // 锁定态/登录态需要重算时，触发各 local 实例的检测
       if (opts.reloadAll) {
         // 重新检测所有 local 实例
@@ -194,9 +198,9 @@ export default {
         Vue.set(this.testResultMap, inst.id, {
           state: "fail",
           diag: {
-            title: "缺少 cURL",
-            detail: "手动模式下必须粘贴 cURL 才能测试",
-            advice: "请从 DevTools → Network → Copy as cURL 复制后粘贴到上方输入框",
+            title: t("settings.testMissingCurlTitle"),
+            detail: t("settings.testMissingCurlDetail"),
+            advice: t("settings.testMissingCurlAdvice"),
           },
         });
         return;
@@ -211,7 +215,7 @@ export default {
       } catch (e) {
         Vue.set(this.testResultMap, inst.id, {
           state: "fail",
-          diag: { title: "测试失败", detail: e.message || String(e), advice: "后台服务可能未就绪，请稍后重试" },
+          diag: { title: t("settings.testFailTitle"), detail: e.message || String(e), advice: t("settings.testFailAdvice") },
         });
       }
     },
@@ -232,7 +236,7 @@ export default {
       await chrome.storage.local.set({ instances: this.instances });
     },
     async confirmDelete(instanceId, name) {
-      if (!confirm(`确认删除「${name}」？`)) return;
+      if (!confirm(t("settings.deleteConfirm", { name }))) return;
       await this.moveInstance(instanceId, 0, true); // 先确保最新数据已存
       const idx = this.instances.findIndex((i) => i.id === instanceId);
       if (idx < 0) return;

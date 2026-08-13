@@ -29,7 +29,7 @@ describe("diagnoseError - 网络类", () => {
 
 describe("diagnoseError - 超时", () => {
   it("请求超时归 timeout 并提取 host", () => {
-    const d = diagnoseError("请求超时（20s）", {
+    const d = diagnoseError("Request timeout (20s)", {
       type: "chatgpt-codex",
       authMode: "local",
     });
@@ -65,7 +65,7 @@ describe("diagnoseError - 鉴权过期（401）", () => {
   });
 
   it("Token 接口 HTTP 401（ChatGPT session 阶段）归 auth_expired", () => {
-    const d = diagnoseError("Token 接口 HTTP 401", {
+    const d = diagnoseError("Token endpoint HTTP 401", {
       type: "chatgpt-codex",
       authMode: "local",
     });
@@ -75,7 +75,7 @@ describe("diagnoseError - 鉴权过期（401）", () => {
 
   it("ChatGPT accessToken 缺失归 auth_expired", () => {
     const d = diagnoseError(
-      "无法从 https://chatgpt.com/api/auth/session 获取 accessToken，可能未登录",
+      "Cannot get accessToken from https://chatgpt.com/api/auth/session, possibly not logged in",
       { type: "chatgpt-codex", authMode: "local" },
     );
     expect(d.category).toBe("auth_expired");
@@ -94,7 +94,7 @@ describe("diagnoseError - 凭证缺失", () => {
   });
 
   it("curl 中未找到 csrfToken（volcengine manual）归 auth_missing 且建议 cURL", () => {
-    const d = diagnoseError("curl 中未找到 csrfToken 或 X-Csrf-Token", {
+    const d = diagnoseError("csrfToken not found in curl: csrfToken or X-Csrf-Token", {
       type: "volcengine-ark",
       authMode: "manual",
     });
@@ -176,7 +176,7 @@ describe("isTerminalAuthDiag - 终态鉴权错误判定", () => {
 
 describe("diagnoseError - 兜底", () => {
   it("未知数据源类型归 unknown + 配置异常", () => {
-    const d = diagnoseError("未知数据源类型: foo", { type: "foo" });
+    const d = diagnoseError("Unknown source type: foo", { type: "foo" });
     expect(d.category).toBe("unknown");
     expect(d.title).toBe("配置异常");
   });

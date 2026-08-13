@@ -1,6 +1,7 @@
 // 归一化逻辑（从 render.js 抽取，ES module）
-// 依赖 format.js 的 formatNum / pad
-import { formatNum, pad } from "./format.js";
+// 依赖 format.js 的 formatNum / formatDateLabel / formatDuration
+import { formatNum, formatDateLabel, formatDuration } from "./format.js";
+import { t } from "./i18n.js";
 
 // 将各数据源的原始 API 返回归一化为统一结构
 // 返回: { planType, windows: [{label, usedPct, detail, resetMs, startMs}], extras: [{label, value}] }
@@ -10,9 +11,9 @@ export function normalizeData(type, data) {
     if (!result) return null;
     const windows = [];
     const defs = [
-      { key: "AFPFiveHour", label: "5小时窗口" },
-      { key: "AFPWeekly", label: "周窗口" },
-      { key: "AFPMonthly", label: "月窗口" },
+      { key: "AFPFiveHour", label: t("render.win5h") },
+      { key: "AFPWeekly", label: t("render.winWeek") },
+      { key: "AFPMonthly", label: t("render.winMonth") },
     ];
     for (const w of defs) {
       const d = result[w.key];
@@ -50,7 +51,11 @@ export function normalizeData(type, data) {
         windows.push({
           label: w.label,
           usedPct: quota > 0 ? (used / quota) * 100 : 0,
-          detail: `${formatNum(used)} / ${formatNum(quota)}（剩余 ${formatNum(remaining)}）`,
+          detail: t("render.detailRemaining", {
+            used: formatNum(used),
+            quota: formatNum(quota),
+            remaining: formatNum(remaining),
+          }),
           resetMs: resetMsNorm,
           startMs: startMsVal,
         });
@@ -71,7 +76,7 @@ export function normalizeData(type, data) {
       if (m.model_name !== "general") continue;
       const intervalMs = m.end_time - m.start_time;
       const intervalHours = Math.round(intervalMs / 3600000);
-      const shortLabel = intervalHours > 0 ? `${intervalHours}小时窗口` : "短窗口";
+      const shortLabel = intervalHours > 0 ? t("render.winHourGeneric", { n: intervalHours }) : t("render.winShort");
       const isActive = (s) => s !== 3;
       if (isActive(m.current_interval_status)) {
         windows.push({
@@ -84,7 +89,7 @@ export function normalizeData(type, data) {
       }
       if (isActive(m.current_weekly_status)) {
         windows.push({
-          label: "周窗口",
+          label: t("render.winWeek"),
           usedPct: parseFloat(m.current_weekly_used_percent) || 0,
           detail: null,
           resetMs: m.weekly_end_time,
@@ -94,7 +99,7 @@ export function normalizeData(type, data) {
     }
     return {
       planType: data._planName
-        ? data._planName.replace(/^TokenPlan/i, "").replace(/^-/, "").replace(/月度会员/, "月度")
+        ? data._planName.replace(/^TokenPlan/i, "").replace(/^-/, "").replace(t("render.minimaxMonthlyFrom"), t("render.minimaxMonthlyTo"))
         : (data.plan_name || data.plan_type || data.subscription_plan || null),
       windows,
       extras: [],
@@ -110,7 +115,7 @@ export function normalizeData(type, data) {
       const resetMs = (primary.reset_at || 0) * 1000;
       const limitSec = primary.limit_window_seconds || 0;
       windows.push({
-        label: "周窗口",
+        label: t("render.winWeek"),
         usedPct: primary.used_percent || 0,
         detail: null,
         resetMs,
@@ -122,7 +127,7 @@ export function normalizeData(type, data) {
       const resetMs = (sec.reset_at || 0) * 1000;
       const limitSec = sec.limit_window_seconds || 0;
       windows.push({
-        label: "次级窗口",
+        label: t("render.winSecondary"),
         usedPct: sec.used_percent || 0,
         detail: null,
         resetMs,
@@ -133,10 +138,10 @@ export function normalizeData(type, data) {
     if (data.credits) {
       const bal = data.credits.balance || "0";
       const balNum = parseFloat(bal);
-      extras.push({ label: "Credits 余额", value: balNum > 0 ? `$${balNum.toFixed(2)}` : "$0" });
+      extras.push({ label: t("render.exCredits"), value: balNum > 0 ? `$${balNum.toFixed(2)}` : "$0" });
     }
     if (data.rate_limit_reset_credits) {
-      extras.push({ label: "重置 Credits 次数", value: String(data.rate_limit_reset_credits.available_count || 0) });
+      extras.push({ label: t("render.exResetCount"), value: String(data.rate_limit_reset_credits.available_count || 0) });
     }
 
     // codex-reset.com 重置预测
@@ -144,13 +149,13 @@ export function normalizeData(type, data) {
     if (fc) {
       if (fc.last_reset_at) {
         const lastDate = new Date(fc.last_reset_at);
-        extras.push({ label: "上次重置", value: `${lastDate.getMonth() + 1}月${lastDate.getDate()}日 ${pad(lastDate.getHours())}:${pad(lastDate.getMinutes())}` });
+        extras.push({ label: t("render.exLastReset"), value: formatDateLabel(lastDate) });
       }
-      extras.push({ label: "官方重置信号", value: fc.official_signal ? "有" : "无" });
+      extras.push({ label: t("render.exOfficialSignal"), value: fc.official_signal ? t("render.exSignalYes") : t("render.exSignalNo") });
       if (fc.probabilities) {
         const p24 = fc.probabilities.rounded_24h || 0;
         const p48 = fc.probabilities.rounded_48h || 0;
-        extras.push({ label: "24h/48h 重置概率", value: `${p24}% / ${p48}%` });
+        extras.push({ label: t("render.exResetProb"), value: `${p24}% / ${p48}%` });
       }
     }
     return {
@@ -169,14 +174,14 @@ export function normalizeData(type, data) {
       let label = null;
       let durationMs = 0;
       if (lim.unit === 3 && lim.number === 5) {
-        label = "5小时窗口";
+        label = t("render.win5h");
         durationMs = 5 * 3600 * 1000;
       } else if (lim.unit === 6 && lim.number === 1) {
-        label = "周窗口";
+        label = t("render.winWeek");
         durationMs = 7 * 24 * 3600 * 1000;
       } else {
         // 通用 fallback
-        label = `${lim.number}${lim.unit === 3 ? "小时窗口" : "天窗口"}`;
+        label = lim.unit === 3 ? t("render.winHourGeneric", { n: lim.number }) : t("render.winDayGeneric", { n: lim.number });
         durationMs = lim.unit === 3 ? lim.number * 3600 * 1000 : lim.number * 24 * 3600 * 1000;
       }
       const used = lim.currentValue || 0;
@@ -188,7 +193,11 @@ export function normalizeData(type, data) {
       windows.push({
         label,
         usedPct: pct,
-        detail: `${formatNum(used)} / ${formatNum(quota)}（剩余 ${formatNum(remaining)}）`,
+        detail: t("render.detailRemaining", {
+          used: formatNum(used),
+          quota: formatNum(quota),
+          remaining: formatNum(remaining),
+        }),
         resetMs,
         startMs,
       });
@@ -208,8 +217,8 @@ export function normalizeData(type, data) {
 export function computeForecast(win) {
   const pct = win.usedPct || 0;
   if (!win.startMs || !win.resetMs) return null;
-  if (pct >= 100) return { text: "额度已用完，等待重置", level: "warn" };
-  if (pct === 0) return { text: "暂无消耗，可用到重置", level: "ok" };
+  if (pct >= 100) return { text: t("render.fcDone"), level: "warn" };
+  if (pct === 0) return { text: t("render.fcIdle"), level: "ok" };
   const now = Date.now();
   const elapsedMs = now - win.startMs;
   const totalMs = win.resetMs - win.startMs;
@@ -219,22 +228,10 @@ export function computeForecast(win) {
   const consumeRatePerMs = pct / elapsedMs;
   const expectLastMs = remainingPct / consumeRatePerMs;
   const expectEndMs = now + expectLastMs;
-  // 动态 import formatDuration 不现实，这里内联简单实现
-  const fmtDur = (ms) => {
-    if (ms <= 0) return "0分";
-    const totalSec = Math.floor(ms / 1000);
-    const dd = Math.floor(totalSec / 86400);
-    const hh = Math.floor((totalSec % 86400) / 3600);
-    const mm = Math.floor((totalSec % 3600) / 60);
-    if (dd > 0) return `${dd}天${hh}时${mm}分`;
-    if (hh > 0) return `${hh}时${mm}分`;
-    return `${mm}分`;
-  };
-  const d = new Date(expectEndMs);
-  const expectStr = `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const expectStr = formatDateLabel(new Date(expectEndMs));
   if (expectEndMs >= win.resetMs) {
-    return { text: "按当前速度可用到重置", level: "ok" };
+    return { text: t("render.fcOk"), level: "ok" };
   }
   const shortageMs = win.resetMs - expectEndMs;
-  return { text: `预计 ${expectStr} 用尽，比重置早 ${fmtDur(shortageMs)}`, level: "warn" };
+  return { text: t("render.fcShort", { date: expectStr, dur: formatDuration(shortageMs) }), level: "warn" };
 }
