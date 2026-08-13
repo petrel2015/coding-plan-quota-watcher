@@ -1,13 +1,24 @@
 {
   "name": "coding-plan-quota-watcher",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "description": "Chrome 扩展：统一查看多个 AI Coding Plan 的用量和刷新时间",
   "scripts": {
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build": "vite build",
+    "sync-version": "node scripts/sync-version.mjs",
+    "prebuild": "node scripts/sync-version.mjs",
+    "package": "node scripts/package.mjs",
+    "preversion": "npm test",
+    "postversion": "node scripts/sync-version.mjs && npm run package && git add manifest.json && git commit --amend --no-edit"
   },
   "devDependencies": {
+    "@vitejs/plugin-vue2": "^2.3.4",
     "vitest": "^1.6.0"
+  },
+  "dependencies": {
+    "element-ui": "^2.15.14",
+    "vue": "^2.7.16"
   }
 }

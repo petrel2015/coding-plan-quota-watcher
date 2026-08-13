@@ -1,0 +1,275 @@
+/* element-overrides.css
+   Element-UI 组件深色模式覆盖 + 基础调色，让组件融入项目的设计 token。
+   复用 common.css 的 --color-* 变量。浅色模式做基础对齐，深色模式覆盖背景/边框/文字。
+   三档主题：data-theme="light"（默认）、data-theme="dark"、auto（media query 回退）。 */
+
+/* ---------- 浅色模式：基础对齐（Element-UI 默认是白底蓝主题，做微调） ---------- */
+:root {
+  /* Element-UI 主色对齐到项目的 accent 蓝 */
+  --el-color-primary: #3b82f6;
+}
+/* loading 蒙层：浅色下用淡灰半透明，比默认纯白更通透 */
+.el-loading-mask {
+  background-color: rgba(248, 250, 252, 0.7);
+}
+.el-loading-spinner .path {
+  stroke: var(--color-accent);
+}
+.el-loading-spinner .el-loading-text {
+  color: var(--color-text-secondary);
+}
+
+/* select 下拉弹层动画修复
+   现象：el-select 展开时，dropdown 卡在 enter 动画初始帧（opacity:0 + scaleY(0)），
+   下拉项被 transform 压成 0 高度 —— 用户看到"闪一下就没了"，点不到任何选项
+   （表现为主题/类型/鉴权等所有 select 都"选了没反应"）。
+   根因：Vue 2.7 runtime 下 Element-UI 的 el-zoom-in-top transition 偶发不把
+   -enter 类替换成 -enter-active，两条规则的 opacity/transform 冲突，-enter 赢。
+   修复：强制 dropdown 始终可见、不缩放。失去 zoom 进出动画，但功能完全可用
+   （display 仍由 v-show 控制，关闭时正常 display:none）。 */
+.el-select-dropdown {
+  opacity: 1 !important;
+  transform: none !important;
+}
+
+/* ---------- 深色模式：显式 dark ---------- */
+:root[data-theme="dark"] {
+  /* 输入框 / 文本域 */
+  .el-input__inner,
+  .el-textarea__inner {
+    background-color: var(--color-card);
+    border-color: var(--color-border-input);
+    color: var(--color-text);
+  }
+  .el-input__inner::placeholder,
+  .el-textarea__inner::placeholder {
+    color: var(--color-text-faint);
+  }
+  .el-input__inner:focus,
+  .el-textarea__inner:focus {
+    border-color: var(--color-accent);
+  }
+  .el-input.is-disabled .el-input__inner {
+    background-color: var(--color-bg-subtle);
+    border-color: var(--color-border);
+    color: var(--color-text-tertiary);
+  }
+
+  /* select 下拉框 */
+  .el-select .el-input__inner {
+    background-color: var(--color-card);
+    border-color: var(--color-border-input);
+    color: var(--color-text);
+  }
+  /* select 弹出层（挂 body 上，不受 data-theme 父级影响，需单独覆盖） */
+  .el-select-dropdown {
+    background-color: var(--color-card);
+    border-color: var(--color-border);
+  }
+  .el-select-dropdown__item {
+    color: var(--color-text);
+  }
+  .el-select-dropdown__item.hover,
+  .el-select-dropdown__item:hover {
+    background-color: var(--color-hover);
+  }
+  .el-select-dropdown__item.selected {
+    color: var(--color-accent);
+  }
+  .el-select-dropdown__item.disabled {
+    color: var(--color-text-mute);
+  }
+
+  /* switch */
+  .el-switch__core {
+    background-color: var(--color-border-input);
+    border-color: var(--color-border-input);
+  }
+  .el-switch.is-checked .el-switch__core {
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  /* button */
+  .el-button--default {
+    background-color: var(--color-card);
+    border-color: var(--color-border-input);
+    color: var(--color-text);
+  }
+  .el-button--default:hover {
+    background-color: var(--color-hover);
+    border-color: var(--color-border-strong);
+    color: var(--color-text);
+  }
+  .el-button--primary {
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
+    color: var(--color-primary-text);
+  }
+  .el-button--primary:hover {
+    background-color: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+  }
+  .el-button--danger.is-plain {
+    background-color: var(--color-card);
+    border-color: var(--color-danger-border);
+    color: var(--color-danger);
+  }
+  .el-button--danger.is-plain:hover {
+    background-color: var(--color-danger-bg);
+    color: var(--color-danger);
+  }
+
+  /* tooltip（弹层） */
+  .el-tooltip__popper {
+    background: var(--color-text);
+    color: var(--color-card);
+  }
+  .el-tooltip__popper[x-placement^="top"] .popper__arrow {
+    border-top-color: var(--color-text);
+  }
+  .el-tooltip__popper[x-placement^="top"] .popper__arrow::after {
+    border-top-color: var(--color-text);
+  }
+  .el-tooltip__popper[x-placement^="bottom"] .popper__arrow {
+    border-bottom-color: var(--color-text);
+  }
+  .el-tooltip__popper[x-placement^="bottom"] .popper__arrow::after {
+    border-bottom-color: var(--color-text);
+  }
+
+  /* loading 态 */
+  .el-loading-mask {
+    background-color: rgba(15, 23, 42, 0.6);
+  }
+  .el-loading-spinner .path {
+    stroke: var(--color-accent);
+  }
+  .el-loading-spinner .el-loading-text {
+    color: var(--color-text-secondary);
+  }
+
+  /* message（el-message，如用得到） */
+  .el-message {
+    background-color: var(--color-card);
+    border-color: var(--color-border);
+  }
+}
+
+/* ---------- 深色模式：auto 回退（media query） ---------- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    /* 输入框 / 文本域 */
+    .el-input__inner,
+    .el-textarea__inner {
+      background-color: var(--color-card);
+      border-color: var(--color-border-input);
+      color: var(--color-text);
+    }
+    .el-input__inner::placeholder,
+    .el-textarea__inner::placeholder {
+      color: var(--color-text-faint);
+    }
+    .el-input.is-disabled .el-input__inner {
+      background-color: var(--color-bg-subtle);
+      border-color: var(--color-border);
+      color: var(--color-text-tertiary);
+    }
+
+    /* select 下拉框 */
+    .el-select .el-input__inner {
+      background-color: var(--color-card);
+      border-color: var(--color-border-input);
+      color: var(--color-text);
+    }
+    .el-select-dropdown {
+      background-color: var(--color-card);
+      border-color: var(--color-border);
+    }
+    .el-select-dropdown__item {
+      color: var(--color-text);
+    }
+    .el-select-dropdown__item.hover,
+    .el-select-dropdown__item:hover {
+      background-color: var(--color-hover);
+    }
+    .el-select-dropdown__item.selected {
+      color: var(--color-accent);
+    }
+    .el-select-dropdown__item.disabled {
+      color: var(--color-text-mute);
+    }
+
+    /* switch */
+    .el-switch__core {
+      background-color: var(--color-border-input);
+      border-color: var(--color-border-input);
+    }
+    .el-switch.is-checked .el-switch__core {
+      background-color: var(--color-accent);
+      border-color: var(--color-accent);
+    }
+
+    /* button */
+    .el-button--default {
+      background-color: var(--color-card);
+      border-color: var(--color-border-input);
+      color: var(--color-text);
+    }
+    .el-button--default:hover {
+      background-color: var(--color-hover);
+      border-color: var(--color-border-strong);
+      color: var(--color-text);
+    }
+    .el-button--primary {
+      background-color: var(--color-primary);
+      border-color: var(--color-primary);
+      color: var(--color-primary-text);
+    }
+    .el-button--primary:hover {
+      background-color: var(--color-primary-hover);
+      border-color: var(--color-primary-hover);
+    }
+    .el-button--danger.is-plain {
+      background-color: var(--color-card);
+      border-color: var(--color-danger-border);
+      color: var(--color-danger);
+    }
+    .el-button--danger.is-plain:hover {
+      background-color: var(--color-danger-bg);
+      color: var(--color-danger);
+    }
+
+    /* tooltip */
+    .el-tooltip__popper {
+      background: var(--color-text);
+      color: var(--color-card);
+    }
+    .el-tooltip__popper[x-placement^="top"] .popper__arrow {
+      border-top-color: var(--color-text);
+    }
+    .el-tooltip__popper[x-placement^="top"] .popper__arrow::after {
+      border-top-color: var(--color-text);
+    }
+    .el-tooltip__popper[x-placement^="bottom"] .popper__arrow {
+      border-bottom-color: var(--color-text);
+    }
+    .el-tooltip__popper[x-placement^="bottom"] .popper__arrow::after {
+      border-bottom-color: var(--color-text);
+    }
+
+    .el-loading-mask {
+      background-color: rgba(15, 23, 42, 0.6);
+    }
+    .el-loading-spinner .path {
+      stroke: var(--color-accent);
+    }
+    .el-loading-spinner .el-loading-text {
+      color: var(--color-text-secondary);
+    }
+    .el-message {
+      background-color: var(--color-card);
+      border-color: var(--color-border);
+    }
+  }
+}

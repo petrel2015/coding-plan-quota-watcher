@@ -1,11 +1,14 @@
-// background.js - Service Worker
+// background.js - Service Worker（ES module）
 // 从 storage 读取实例配置，动态拉取数据，缓存到 storage
-// 数据源模板从 sources.js 引入（单一来源，与 settings.js 共用）
+// 数据源模板从 shared/sources.js 引入（单一来源，与 Vue 组件共用）
 
-importScripts("sources.js");
+import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances } from "../shared/sources.js";
+import { diagnoseError } from "../shared/diagnose.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
+// 单次请求超时：防止某请求挂起导致整条串行刷新链卡死、卡片永远转圈
+const FETCH_TIMEOUT_MS = 20000;
 
 // ------------------------------------------------------------
 // DNR（declarativeNetRequest）助手
@@ -63,7 +66,25 @@ async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
   });
 
   try {
-    return await fetch(bustUrl.toString(), { ...fetchOpts, cache: "no-store" });
+    // 超时保护：某请求挂起（网络半开/服务器不响应）时主动 abort，
+    // 否则会卡住整条串行刷新链，导致卡片永远转圈。
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      return await fetch(bustUrl.toString(), {
+        ...fetchOpts,
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } catch (e) {
+      // AbortError 转成可读的超时错误，便于诊断归类
+      if (e && e.name === "AbortError") {
+        throw new Error(`请求超时（${FETCH_TIMEOUT_MS / 1000}s）`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   } finally {
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: [ruleId],
@@ -123,10 +144,8 @@ async function refreshAll() {
   console.log("[QuotaWatcher] refreshing all...");
   try {
     const instances = await getInstances();
-    // 逐个串行刷新，每个都走 serializeFetch 确保不并发
-    for (const inst of instances) {
-      await serializeFetch(() => fetchAndStore(inst));
-    }
+    // 并发刷新全部实例（各实例写独立的 data_<id> key，互不冲突）
+    await Promise.all(instances.map((inst) => fetchAndStore(inst)));
   } finally {
     _refreshing = false;
   }
@@ -140,6 +159,16 @@ async function refreshOne(instanceId) {
   await serializeFetch(() => fetchAndStore(inst));
 }
 
+// 收集某数据源类型相关的候选 URL（用于网络错误时诊断出具体不通的域名）
+function collectUrlsForType(type) {
+  const tmpl = SOURCE_TEMPLATES[type];
+  if (!tmpl) return [];
+  const urls = [];
+  if (tmpl.tokenEndpoint) urls.push(tmpl.tokenEndpoint);
+  if (tmpl.url) urls.push(tmpl.url);
+  return urls;
+}
+
 // 实际获取数据并存入 storage
 async function fetchAndStore(inst) {
   try {
@@ -150,6 +179,7 @@ async function fetchAndStore(inst) {
         _fetchedAt: Date.now(),
         _error: null,
         _lastError: null,
+        _diag: null,
         _hasValidData: true,
         _name: inst.name,
         _type: inst.type,
@@ -158,6 +188,11 @@ async function fetchAndStore(inst) {
     console.log(`[QuotaWatcher] ${inst.id} OK`);
   } catch (err) {
     console.error(`[QuotaWatcher] ${inst.id} error:`, err);
+    const diag = diagnoseError(err, {
+      type: inst.type,
+      authMode: inst.authMode,
+      urls: collectUrlsForType(inst.type),
+    });
     const existing = await chrome.storage.local.get(`data_${inst.id}`);
     const oldData = existing[`data_${inst.id}`];
     if (oldData && oldData._hasValidData) {
@@ -165,6 +200,7 @@ async function fetchAndStore(inst) {
         [`data_${inst.id}`]: {
           ...oldData,
           _lastError: err.message,
+          _diag: diag,
         },
       });
       console.log(`[QuotaWatcher] ${inst.id} fetch failed, keeping last data`);
@@ -174,6 +210,7 @@ async function fetchAndStore(inst) {
           _fetchedAt: Date.now(),
           _error: err.message,
           _lastError: null,
+          _diag: diag,
           _hasValidData: false,
           _name: inst.name,
           _type: inst.type,
@@ -385,6 +422,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === "refreshOne") {
     refreshOne(msg.instanceId).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  // 测试连接：用传入的 instance（含用户最新编辑）真实请求一次，
+  // 不写 storage（不污染缓存），只返回成功或结构化诊断结果。
+  if (msg.action === "testConnection") {
+    const inst = msg.instance;
+    if (!inst || !inst.id) {
+      sendResponse({ ok: false, diag: diagnoseError("未知数据源类型: (空)", { authMode: inst && inst.authMode }) });
+      return false;
+    }
+    serializeFetch(() => fetchInstance(inst))
+      .then(() => sendResponse({ ok: true }))
+      .catch((err) => {
+        const diag = diagnoseError(err, {
+          type: inst.type,
+          authMode: inst.authMode,
+          urls: collectUrlsForType(inst.type),
+        });
+        sendResponse({ ok: false, diag });
+      });
     return true;
   }
 });

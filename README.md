@@ -21,13 +21,76 @@
 - **自动刷新**：后台每 5 分钟拉取一次，也可手动单卡/全部刷新
 - **可调节列数**：Dashboard 支持 1/2/3 列布局
 
-## 安装
+## 安装（从源码构建加载）
 
-1. 下载本仓库代码
-2. 打开 Chrome，访问 `chrome://extensions/`
-3. 开启右上角「开发者模式」
-4. 点击「加载已解压的扩展程序」，选择本项目根目录
-5. 扩展图标会出现在工具栏，**点击图标直接打开 Dashboard 面板**
+本扩展使用 Vite 打包，MV3 禁止远程 CDN 脚本，因此必须先构建再加载。
+
+```bash
+git clone <仓库地址>
+cd coding-plan-quota-watcher
+npm install          # 安装依赖（Vue、Element-UI、Vite 等）
+npm run build        # 打包到 dist/（settings/dashboard/background + Element-UI CSS/字体）
+```
+
+构建完成后：
+
+1. 打开 Chrome，访问 `chrome://extensions/`
+2. 开启右上角「开发者模式」
+3. 点击「加载已解压的扩展程序」，**选择项目根目录**（不是 dist/，是整个项目根，manifest.json 所在处）
+4. 扩展图标会出现在工具栏，**点击图标直接打开 Dashboard 面板**
+
+> 改代码后只需 `npm run build` 再到 `chrome://extensions` 点扩展卡片上的「刷新」按钮即可。
+> `build` 会自动先跑 `sync-version`（见下节），保证 manifest.json 版本号与 package.json 一致。
+
+## 版本号管理
+
+**单一真源**：`package.json` 的 `version` 字段。`manifest.json` 的 `version` 由脚本 `scripts/sync-version.mjs` 自动同步，**不要手动改 manifest.json 的版本号**。
+
+发版推荐用 npm 内置命令（会同时改 package.json + 打 git tag）：
+
+```bash
+npm version patch   # 1.7.0 → 1.7.1（bug 修复）
+npm version minor   # 1.7.0 → 1.8.0（新功能）
+npm version major   # 1.7.0 → 2.0.0（破坏性变更）
+```
+
+`npm version` 执行时会先跑测试（`preversion` 钩子），通过后才改版本号并提交 + 打 tag。改完后用 `npm run package`（见下）产出该版本的 zip，然后 `git push --tags` 推 tag。
+
+> 手动改版本号也可以，但改完 `package.json` 后务必跑 `npm run sync-version` 同步到 manifest.json；`npm run build` / `package` 也会自动同步。
+
+## 打包成 Chrome 扩展
+
+### 方式一：一键打包 zip（推荐）
+
+```bash
+npm run package
+```
+
+一条命令完成：同步版本号 → `vite build` → 打 zip 到 `releases/`。产物：
+
+```
+releases/coding-plan-quota-watcher-<version>.zip
+```
+
+zip 内容是**可加载的最小扩展包**（`manifest.json` + `dist/` 产物 + `icons/` + `*.html` + `common.css` + `README.md`），自动排除 `node_modules/`、`.git/`、`src/`、`test/`、`*.pem`、`*.crx` 等开发文件。跨平台：macOS/Linux 用系统 `zip`，Windows 用自带的 `tar`。
+
+**安装这个 zip**：
+
+- **开发者模式加载**（内部/小范围分发）：解压 zip → `chrome://extensions` → 开启「开发者模式」→「加载已解压的扩展程序」→ 选解压后的目录。
+- **上架 Chrome 应用商店**：访问 [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/)，直接上传该 zip，填写商店信息后提交审核。
+
+### 方式二：打包成 .crx（Chrome 内置，需私钥）
+
+适合需要 `.crx` 二进制分发、且有固定私钥的场景：
+
+1. 先 `npm run build`（确保 `dist/` 最新）
+2. 打开 `chrome://extensions/`，开启「开发者模式」
+3. 点击「打包扩展程序」
+4. **扩展程序根目录**：填项目根目录路径（含 manifest.json 的目录，不是 dist/）
+5. **私钥文件**：首次留空，Chrome 自动生成 `key.pem`（妥善保管，后续更新必须用同一个）
+6. 点击「打包扩展程序」→ 在项目**上级目录**生成 `coding-plan-quota-watcher.crx` 和 `coding-plan-quota-watcher.pem`
+
+> ⚠️ `.pem` 是扩展的身份凭证，**务必保管好且不要提交到 git**（已在 .gitignore 排除）。丢了就无法给同一个扩展发布更新，Chrome 会视为新扩展。
 
 ## 配置数据源
 
@@ -60,41 +123,71 @@
 ### 项目结构
 
 ```
-manifest.json      扩展清单
-background.js      Service Worker：定时拉取、DNR 注入、消息分发
-sources.js         数据源模板（URL/header/cookie 配置，单一来源）
-render.js          共享渲染：归一化 + 进度条 + 消耗预测
-common.js          Dashboard 渲染协调器 + 工具函数
-common.css         共享样式（卡片、进度条、深色模式）
-dashboard.html/js  全屏 Dashboard 页面
-settings.html/js   数据源配置页（增删改、鉴权切换、排序）
-test/              单元测试（vitest）
+manifest.json          扩展清单（service_worker 指向 dist/background.js）
+vite.config.js         Vite 构建配置（multi-entry）
+common.css             共享设计 token（颜色/圆角/阴影，三档主题 CSS 变量）
+element-overrides.css  Element-UI 组件深色模式覆盖
+scripts/
+├── sync-version.mjs   版本号同步：package.json → manifest.json
+└── package.mjs        一键打包：sync-version + build + zip → releases/
+src/
+├── settings/          settings 页（Vue 2 + Element-UI）
+│   ├── main.js        Vue 入口
+│   ├── App.vue        设置页根组件
+│   └── InstanceCard.vue 数据源卡片组件
+├── dashboard/         dashboard 页（Vue 2 + Element-UI）
+│   ├── main.js        Vue 入口
+│   ├── App.vue        仪表盘根组件
+│   └── SourceCard.vue 用量卡片组件
+├── background/        Service Worker
+│   └── main.js        ES module：定时拉取、DNR 注入、消息分发
+└── shared/            跨页面共享的 ES module
+    ├── sources.js     数据源模板、默认配置、字段迁移
+    ├── render.js      归一化 + 消耗预测
+    ├── format.js      格式化工具（相对时间/倒计时/数字等）
+    └── theme.js       主题三档切换
+dashboard.html / settings.html  页面入口（引用 dist 产物）
+test/                  单元测试（vitest）
+dist/                  构建产物（gitignore，需 npm run build 生成）
+releases/              打包产物（gitignore，npm run package 生成）
 ```
+
+### 开发流程
+
+```bash
+npm install           # 安装依赖
+npm run build         # Vite 打包到 dist/（MV3 禁远程脚本，必须本地打包）
+# 然后到 chrome://extensions → 加载已解压扩展程序 → 选项目根目录
+# 改代码后重新 npm run build + 点扩展刷新
+```
+
+> MV3 扩展页 CSP 禁止远程 CDN 脚本和 `unsafe-eval`，因此 Vue/Element-UI 必须本地打包（Vite 编译时模板编译，规避运行时编译）。
 
 ### 运行测试
 
 ```bash
-npm install
 npm test            # 单次运行
 npm run test:watch  # 监听模式
 ```
 
-测试覆盖 `normalizeData`（四数据源归一化）和 `migrateInstances`（字段迁移）这两个纯函数。
+测试覆盖 `normalizeData`（四数据源归一化）、`migrateInstances`（字段迁移）、`generateInstanceName`（默认名字生成）。
 
 ### 架构说明
 
 **数据流**：
 ```
-平台 API → background.js（DNR 注入 cookie）→ storage.local → onChanged 事件 → Dashboard 卡片
+平台 API → background SW（DNR 注入 cookie）→ storage.local → onChanged 事件 → Vue 响应式更新
 ```
 
 **关键技术点**：
 - **declarativeNetRequest (DNR)**：Service Worker 的 `fetch` 不带 cookie，需用 DNR 动态规则在请求发出前注入 `cookie` header。每个请求用唯一 `_qwid` 查询参数匹配规则，请求结束后立即清理。
 - **串行刷新**：所有实例的拉取通过 `serializeFetch` 链式锁串行执行，避免 DNR 规则并发冲突。
-- **storage 推送**：前端不轮询，通过 `chrome.storage.onChanged` 监听后台写入，实现近实时更新。
+- **storage 推送**：前端不轮询，通过 `chrome.storage.onChanged` 监听后台写入，Vue 响应式自动更新 DOM。
+- **ES module 统一**：background service worker 用 `"type": "module"`，与页面共享 `src/shared/` 下的纯逻辑，无重复。
 
 ## 技术栈
 
 - Chrome Extension Manifest V3
-- 原生 JavaScript（无框架、无构建步骤）
+- Vue 2.7 + Element-UI 2.15（SFC，Vite 编译时模板编译）
+- Vite 5（multi-entry 打包）
 - vitest（单元测试）
