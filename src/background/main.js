@@ -144,10 +144,8 @@ async function refreshAll() {
   console.log("[QuotaWatcher] refreshing all...");
   try {
     const instances = await getInstances();
-    // 逐个串行刷新，每个都走 serializeFetch 确保不并发
-    for (const inst of instances) {
-      await serializeFetch(() => fetchAndStore(inst));
-    }
+    // 并发刷新全部实例（各实例写独立的 data_<id> key，互不冲突）
+    await Promise.all(instances.map((inst) => fetchAndStore(inst)));
   } finally {
     _refreshing = false;
   }

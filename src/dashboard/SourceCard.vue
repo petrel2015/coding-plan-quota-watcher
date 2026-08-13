@@ -1,5 +1,5 @@
 <template>
-  <div class="source-card" v-loading="loading" element-loading-text="刷新中">
+  <div class="source-card" :class="{ 'card-loading': loading }">
     <!-- header：名称 + planType 徽章 + 刷新控件 -->
     <div class="source-header">
       <div class="source-title">
@@ -15,6 +15,16 @@
           @click="$emit('refresh-one', inst.id)"
         >{{ loading ? "刷新中" : "刷新" }}</el-button>
       </div>
+    </div>
+
+    <!-- 刷新状态提示：超时失败 / 可点击重试 -->
+    <div v-if="timedOut" class="retry-block retry-error">
+      <span class="retry-msg">刷新超时（&gt;30s）</span>
+      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">点击重试</a>
+    </div>
+    <div v-else-if="loading && retryable" class="retry-block">
+      <span class="retry-msg">刷新较慢…</span>
+      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">点击重试</a>
     </div>
 
     <!-- 正文 -->
@@ -76,6 +86,8 @@ export default {
     inst: { type: Object, required: true },
     data: { type: Object, default: null },
     loading: { type: Boolean, default: false },
+    retryable: { type: Boolean, default: false }, // 转圈≥5s，显示「点击重试」链接
+    timedOut: { type: Boolean, default: false }, // 转圈≥30s，判定超时失败
     now: { type: Number, default: () => Date.now() }, // 用于倒计时刷新
   },
   computed: {
@@ -139,6 +151,38 @@ export default {
   box-shadow: var(--shadow-card);
   transition: box-shadow 0.15s, border-color 0.15s;
   position: relative;
+}
+/* 刷新状态提示条（5s 可重试 / 30s 超时失败） */
+.retry-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  border-radius: var(--radius-btn);
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+.retry-msg {
+  color: var(--color-text-secondary);
+}
+.retry-link {
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.retry-link:hover {
+  text-decoration: underline;
+  color: var(--color-accent-hover);
+}
+.retry-error {
+  background: var(--color-danger-bg);
+  border: 1px solid var(--color-danger-border);
+}
+.retry-error .retry-msg {
+  color: var(--color-danger);
 }
 .source-header {
   display: flex;

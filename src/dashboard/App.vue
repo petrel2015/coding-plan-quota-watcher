@@ -16,8 +16,11 @@
         :inst="inst"
         :data="dataMap[inst.id]"
         :loading="refreshingIds.has(inst.id)"
+        :retryable="retryableIds.has(inst.id)"
+        :timed-out="timedOutIds.has(inst.id)"
         :now="now"
         @refresh-one="refreshOne"
+        @retry="retry"
       />
       <div v-if="enabledInstances.length === 0" class="empty">
         暂无启用的数据源，请到设置页面添加
@@ -33,7 +36,9 @@ import { applyTheme, setThemeAttr } from "../shared/theme.js";
 
 // 手动刷新时每张卡的最小转圈时间，避免太快闪一下看不到（自动刷新不受影响）
 const MIN_LOADING_MS = 500;
-// loading 兜底超时：即使 background 完全无响应，也强制清掉转圈，防止永久卡住
+// 转圈超过该时长（5s）后，卡片显示「点击重试」链接（仍在转圈，可提前触发重试）
+const RETRY_SHOW_MS = 5000;
+// 转圈超过该时长（30s）判定超时失败：停止转圈并提示失败
 const LOADING_FALLBACK_TIMEOUT_MS = 30000;
 
 export default {
@@ -46,8 +51,12 @@ export default {
       displayCols: 2,
       refreshingIds: new Set(), // 正在刷新的实例 id（注意：Set 需重新赋值触发响应式）
       refreshStartTimes: {}, // { [instanceId]: startTimeMs }，用于 500ms 最小展示
+      retryableIds: new Set(), // 转圈≥5s 的实例 id：显示「点击重试」链接
+      timedOutIds: new Set(), // 转圈≥30s 判定超时的实例 id：停止转圈并提示失败
       now: Date.now(),
       _tickTimer: null,
+      _retryTimers: {}, // { [instanceId]: timer }，5s 显示重试链接
+      _fallbackTimers: {}, // { [instanceId]: timer }，30s 超时失败
     };
   },
   computed: {
@@ -74,10 +83,8 @@ export default {
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
     if (this._tickTimer) clearInterval(this._tickTimer);
-    if (this._fallbackTimers) {
-      for (const id of Object.keys(this._fallbackTimers)) {
-        clearTimeout(this._fallbackTimers[id]);
-      }
+    for (const map of [this._retryTimers, this._fallbackTimers]) {
+      for (const id of Object.keys(map)) clearTimeout(map[id]);
     }
   },
   methods: {
@@ -146,13 +153,55 @@ export default {
       newSet.add(id);
       this.refreshingIds = newSet;
       this.refreshStartTimes = { ...this.refreshStartTimes, [id]: Date.now() };
-      // 兜底：若迟迟没有 data_ 回写（background 卡死/无响应），强制清掉
-      if (this._fallbackTimers == null) this._fallbackTimers = {};
-      clearTimeout(this._fallbackTimers[id]);
-      this._fallbackTimers[id] = setTimeout(() => this.markDone(id), LOADING_FALLBACK_TIMEOUT_MS);
+      // 清掉上一次的定时器与超时/重试标记，重新计时
+      this._clearCardTimers(id);
+      const rt = new Set(this.retryableIds);
+      rt.delete(id);
+      this.retryableIds = rt;
+      const to = new Set(this.timedOutIds);
+      to.delete(id);
+      this.timedOutIds = to;
+      // 5s 后显示「点击重试」链接
+      this._retryTimers[id] = setTimeout(() => this.markRetryable(id), RETRY_SHOW_MS);
+      // 30s 判定超时失败（background 卡死/无响应时兜底，防止永久卡住）
+      this._fallbackTimers[id] = setTimeout(() => this.markTimedOut(id), LOADING_FALLBACK_TIMEOUT_MS);
+    },
+    _clearCardTimers(id) {
+      if (this._retryTimers[id]) { clearTimeout(this._retryTimers[id]); delete this._retryTimers[id]; }
+      if (this._fallbackTimers[id]) { clearTimeout(this._fallbackTimers[id]); delete this._fallbackTimers[id]; }
+    },
+    // 转圈≥5s：让该卡显示可点击的重试链接（仍保持转圈）
+    markRetryable(id) {
+      if (!this.refreshingIds.has(id)) return;
+      const newSet = new Set(this.retryableIds);
+      newSet.add(id);
+      this.retryableIds = newSet;
+    },
+    // 转圈≥30s：停止转圈并标记为超时失败
+    markTimedOut(id) {
+      this._clearCardTimers(id);
+      const rs = new Set(this.refreshingIds);
+      rs.delete(id);
+      this.refreshingIds = rs;
+      const ts = { ...this.refreshStartTimes };
+      delete ts[id];
+      this.refreshStartTimes = ts;
+      const rt = new Set(this.retryableIds);
+      rt.delete(id);
+      this.retryableIds = rt;
+      const to = new Set(this.timedOutIds);
+      to.add(id);
+      this.timedOutIds = to;
     },
     // 标记某实例完成：清 loading，但保证手动刷新至少展示 500ms
     markDone(id) {
+      this._clearCardTimers(id);
+      const rt = new Set(this.retryableIds);
+      rt.delete(id);
+      this.retryableIds = rt;
+      const to = new Set(this.timedOutIds);
+      to.delete(id);
+      this.timedOutIds = to;
       if (!this.refreshingIds.has(id)) return;
       const start = this.refreshStartTimes[id];
       const elapsed = start ? Date.now() - start : MIN_LOADING_MS;
@@ -163,10 +212,6 @@ export default {
         const ts = { ...this.refreshStartTimes };
         delete ts[id];
         this.refreshStartTimes = ts;
-        if (this._fallbackTimers && this._fallbackTimers[id]) {
-          clearTimeout(this._fallbackTimers[id]);
-          delete this._fallbackTimers[id];
-        }
       };
       if (elapsed >= MIN_LOADING_MS) {
         clear();
@@ -197,6 +242,15 @@ export default {
         await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
       } catch (e) {
         console.error("[QuotaWatcher] refreshOne failed:", e);
+      }
+    },
+    // 转圈≥5s 时点击「重试」：即使还在转圈也强制重新触发刷新，并重置计时
+    async retry(instanceId) {
+      this.markRefreshing(instanceId);
+      try {
+        await chrome.runtime.sendMessage({ action: "refreshOne", instanceId });
+      } catch (e) {
+        console.error("[QuotaWatcher] retry failed:", e);
       }
     },
     goSettings() {
