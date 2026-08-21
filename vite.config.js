@@ -28,6 +28,17 @@ export default defineConfig({
       output: {
         entryFileNames: "[name].js",
         chunkFileNames: "assets/chunks/[name]-[hash].js",
+        // element-ui / vue 等第三方依赖固定进 theme 共享块：
+        // 根目录 HTML 硬编码引用其抽离的 CSS（assets/theme.css），
+        // 不固定块名会随 chunk 自动命名漂移（如引入 locale 后变成 en.css）
+        manualChunks(id) {
+          if (id.includes("node_modules")) return "theme";
+          // 深色覆盖样式与 theme.js 是两页面共享的 UI 公共依赖，
+          // 一并归入 theme 块，保证其 CSS 合并输出为单个 theme.css
+          if (id.endsWith("shared/theme.js") || id.endsWith("element-overrides.css")) {
+            return "theme";
+          }
+        },
         assetFileNames: (info) => {
           // Element-UI 字体分到 fonts 目录
           if (info.name && /\.(woff2?|ttf|eot)$/.test(info.name)) {
