@@ -42,6 +42,9 @@ const MIN_LOADING_MS = 500;
 const RETRY_SHOW_MS = 5000;
 // 转圈超过该时长（30s）判定超时失败：停止转圈并提示失败
 const LOADING_FALLBACK_TIMEOUT_MS = 30000;
+// 打开页面时的自动刷新门槛：数据缓存在该时长内（与后台 alarm 的 5 分钟
+// 刷新周期一致）就不刷，频繁开关页面不再反复转圈；手动「全部刷新」不受影响
+const AUTO_REFRESH_STALE_MS = 5 * 60 * 1000;
 
 export default {
   name: "DashboardApp",
@@ -87,9 +90,10 @@ export default {
     this.tickTimer = setInterval(() => {
       this.now = Date.now();
     }, 15000);
-    // 进入 dashboard 立即刷新一次（从 settings 改完配置回来能马上看到最新数据）
+    // 进入 dashboard：数据过期（任一启用卡片缺数据或缓存 ≥5 分钟）才自动刷新，
+    // 从 settings 改完配置回来若数据仍新鲜则直接展示缓存，不闪进度条。
     // 自动刷新跳过已知登录失效的卡片，避免无意义的进度条闪烁
-    this.refreshAll(true);
+    if (this.isDataStale()) this.refreshAll(true);
   },
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
@@ -138,6 +142,10 @@ export default {
           needReloadCols = true;
         } else if (key === "theme") {
           needReloadTheme = true;
+        } else if (key === "locale") {
+          // 语言绑在启动链路上（Element UI 文案 / doc lang），变更后整页重载
+          location.reload();
+          return;
         } else if (key.startsWith("data_")) {
           const id = key.slice(5);
           dataUpdates[id] = changes[key].newValue;
@@ -231,6 +239,15 @@ export default {
         // 不足 500ms：补足后再清（setTimeout 期间仍显示转圈）
         setTimeout(clear, MIN_LOADING_MS - elapsed);
       }
+    },
+    // 数据是否过期：任一启用卡片缺数据或缓存超过 5 分钟即视为过期。
+    // 后台各实例同批刷新、stamp 同步推进；新添加的卡片 stamp=0 会触发补刷
+    isDataStale() {
+      const stamps = this.enabledInstances.map(
+        (inst) => (this.dataMap[inst.id] && this.dataMap[inst.id]._fetchedAt) || 0,
+      );
+      const oldest = stamps.length ? Math.min(...stamps) : 0;
+      return Date.now() - oldest >= AUTO_REFRESH_STALE_MS;
     },
     // 该实例最近一次失败是否为「需要用户重新登录/补齐凭证」的终态错误：
     // 这类错误重试不会自愈，自动刷新时不应再触发转圈（避免无意义的进度条闪烁）

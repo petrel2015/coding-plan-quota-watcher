@@ -28,6 +28,14 @@
             <el-option :label="t('settings.themeDark')" value="dark" />
           </el-select>
         </div>
+        <div class="field-row">
+          <span class="field-label">{{ t('settings.language') }}</span>
+          <el-select v-model="locale" @change="onLocaleChange" style="width:120px;">
+            <el-option :label="t('settings.langAuto')" value="auto" />
+            <el-option label="中文" value="zh" />
+            <el-option label="English" value="en" />
+          </el-select>
+        </div>
       </div>
 
       <!-- 数据源 -->
@@ -82,6 +90,7 @@ export default {
       instances: [],
       displayCols: 2,
       theme: "auto",
+      locale: "auto",
       loginStatusMap: {}, // { [instanceId]: { state, count, message } }
       testResultMap: {}, // { [instanceId]: { state: "testing"|"ok"|"fail", diag? } }
       toastVisible: false,
@@ -102,10 +111,11 @@ export default {
   methods: {
     t,
     async loadAll() {
-      const { instances: raw, displayCols, theme } = await chrome.storage.local.get([
+      const { instances: raw, displayCols, theme, locale } = await chrome.storage.local.get([
         "instances",
         "displayCols",
         "theme",
+        "locale",
       ]);
       // 字段迁移
       let instances = raw;
@@ -122,6 +132,7 @@ export default {
       this.instances = instances;
       this.displayCols = displayCols || 2;
       this.theme = theme || "auto";
+      this.locale = locale || "auto";
       // 对所有 local 实例触发登录检测
       this.instances.forEach((inst) => {
         const locked = this.isLocalLocked(inst);
@@ -266,6 +277,12 @@ export default {
     onThemeChange(val) {
       chrome.storage.local.set({ theme: val });
       setThemeAttr(val);
+    },
+    // 语言绑在整个启动链路上（Element UI 文案 / document.lang / 诊断文案），
+    // 写入后整页重载最简单可靠；dashboard 若开着会经 onChanged 自行重载
+    async onLocaleChange(val) {
+      await chrome.storage.local.set({ locale: val });
+      location.reload();
     },
     goBack() {
       window.location.href = "dashboard.html";

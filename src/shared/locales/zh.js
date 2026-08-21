@@ -36,6 +36,8 @@ export default {
   "settings.themeAuto": "跟随系统",
   "settings.themeLight": "浅色",
   "settings.themeDark": "深色",
+  "settings.language": "语言",
+  "settings.langAuto": "跟随浏览器",
   "settings.sources": "数据源",
   "settings.add": "+ 新增",
   "settings.empty": "暂无数据源，点击新增添加",

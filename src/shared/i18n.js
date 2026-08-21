@@ -41,6 +41,18 @@ export function setLocale(lang) {
   if (SUPPORTED_LOCALES.includes(lang)) currentLocale = lang;
 }
 
+// 应用用户手动选择的语言（storage 的 locale = "zh" | "en"，缺省/auto 跟随浏览器）。
+// t() 必须保持同步而 storage 读取是异步，故只在页面 / SW 启动入口调用一次。
+// 无 chrome.storage 的环境（单测 / Node）静默跳过。
+export async function applyStoredLocale() {
+  try {
+    const { locale } = await chrome.storage.local.get("locale");
+    if (SUPPORTED_LOCALES.includes(locale)) setLocale(locale);
+  } catch {
+    // ignore: 非 extension 环境
+  }
+}
+
 // 翻译：t("card.refresh") 或 t("diag.serverError.title", { status: 500 })
 // 找不到 key 时回退到默认语言，仍找不到则返回 key 本身并告警。
 export function t(key, params) {

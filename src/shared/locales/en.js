@@ -36,6 +36,8 @@ export default {
   "settings.themeAuto": "System",
   "settings.themeLight": "Light",
   "settings.themeDark": "Dark",
+  "settings.language": "Language",
+  "settings.langAuto": "Follow browser",
   "settings.sources": "Data Sources",
   "settings.add": "+ Add",
   "settings.empty": "No data sources yet. Click + Add.",

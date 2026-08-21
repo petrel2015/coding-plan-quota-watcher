@@ -4,6 +4,7 @@
 
 import { SOURCE_TEMPLATES, DEFAULT_INSTANCES, migrateInstances } from "../shared/sources.js";
 import { diagnoseError } from "../shared/diagnose.js";
+import { setLocale, SUPPORTED_LOCALES } from "../shared/i18n.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
@@ -165,6 +166,17 @@ async function getInstances() {
 
 let _refreshing = false;
 
+// SW 每次唤醒都是全新模块状态，语言会回落到浏览器默认；诊断文案（_diag）
+// 随语言生成并写入 storage，计算前先同步一次用户手动选择的语言
+async function syncLocale() {
+  try {
+    const { locale } = await chrome.storage.local.get("locale");
+    if (SUPPORTED_LOCALES.includes(locale)) setLocale(locale);
+  } catch {
+    // ignore
+  }
+}
+
 async function refreshAll() {
   if (_refreshing) {
     console.log("[QuotaWatcher] refresh already in progress, skipping");
@@ -173,6 +185,7 @@ async function refreshAll() {
   _refreshing = true;
   console.log("[QuotaWatcher] refreshing all...");
   try {
+    await syncLocale();
     const instances = await getInstances();
     // 并发刷新全部实例（各实例写独立的 data_<id> key，互不冲突）
     // 看门狗兜底：单请求超时已覆盖正常路径，这里再保一层 _refreshing 一定复位
@@ -190,6 +203,7 @@ async function refreshAll() {
 
 // 刷新单个实例（卡片调用）
 async function refreshOne(instanceId) {
+  await syncLocale();
   const instances = await loadAllInstances();
   const inst = instances.find((i) => i.id === instanceId && i.enabled);
   if (!inst) return;
@@ -470,7 +484,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse({ ok: false, diag: diagnoseError("Unknown source type: (empty)", { authMode: inst && inst.authMode }) });
       return false;
     }
-    serializeFetch(() => fetchInstance(inst))
+    // onMessage 监听器不能是 async（须同步 return true 保住 sendResponse 通道），
+    // 语言同步放进串行链内
+    serializeFetch(() => syncLocale().then(() => fetchInstance(inst)))
       .then(() => sendResponse({ ok: true }))
       .catch((err) => {
         const diag = diagnoseError(err, {
