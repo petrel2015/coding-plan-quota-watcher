@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Coding Plan Quota Watcher"
+  },
+  "extDesc": {
+    "message": "统一查看多个 AI Coding Plan 的用量和刷新时间"
+  },
+  "extTitle": {
+    "message": "Coding Plan 用量监控"
+  }
+}

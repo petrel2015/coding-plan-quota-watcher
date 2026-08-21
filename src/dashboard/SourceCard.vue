@@ -13,36 +13,36 @@
           class="card-refresh-btn"
           :disabled="loading"
           @click="$emit('refresh-one', inst.id)"
-        >{{ loading ? "刷新中" : "刷新" }}</el-button>
+        >{{ loading ? t('card.refreshing') : t('card.refresh') }}</el-button>
       </div>
     </div>
 
     <!-- 刷新状态提示：超时失败 / 可点击重试 -->
     <div v-if="timedOut" class="retry-block retry-error">
-      <span class="retry-msg">刷新超时（&gt;30s）</span>
-      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">点击重试</a>
+      <span class="retry-msg">{{ t('card.timeout') }}</span>
+      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">{{ t('card.retry') }}</a>
     </div>
     <div v-else-if="loading && retryable" class="retry-block">
-      <span class="retry-msg">刷新较慢…</span>
-      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">点击重试</a>
+      <span class="retry-msg">{{ t('card.slow') }}</span>
+      <a href="javascript:;" class="retry-link" @click="$emit('retry', inst.id)">{{ t('card.retry') }}</a>
     </div>
 
     <!-- 正文 -->
     <template v-if="!data">
-      <div class="error-msg">暂无数据，点击刷新获取</div>
+      <div class="error-msg">{{ t('card.noData') }}</div>
     </template>
     <template v-else-if="data._lastError">
       <div class="diag-block diag-warn">
-        <div class="diag-title">获取失败，显示上次数据 · {{ diag && diag.title }}</div>
+        <div class="diag-title">{{ t('card.showLast') }} · {{ diag && diag.title }}</div>
         <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
         <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
       </div>
       <div v-if="normalized" class="card-body" v-html="windowsHtml"></div>
-      <div v-else class="error-msg">数据格式异常</div>
+      <div v-else class="error-msg">{{ t('card.formatError') }}</div>
     </template>
     <template v-else-if="data._error && !data._hasValidData">
       <div class="diag-block diag-error">
-        <div class="diag-title">{{ diag && diag.title || "获取失败" }}</div>
+        <div class="diag-title">{{ (diag && diag.title) || t('card.fetchFailed') }}</div>
         <div v-if="diag && diag.detail" class="diag-detail">{{ diag.detail }}</div>
         <div v-if="diag && diag.advice" class="diag-advice">{{ diag.advice }}</div>
       </div>
@@ -67,11 +67,11 @@
         </div>
         <div v-for="(ex, i) in normalizedExtras" :key="'ex' + i" class="window-detail">{{ ex.label }}: {{ ex.value }}</div>
       </div>
-      <div v-else class="error-msg">数据格式异常</div>
+      <div v-else class="error-msg">{{ t('card.formatError') }}</div>
     </template>
 
     <!-- 更新时间 -->
-    <div v-if="data && data._fetchedAt" class="fetched-at">更新于 {{ refreshedText }}</div>
+    <div v-if="data && data._fetchedAt" class="fetched-at">{{ t('card.updated', { time: refreshedText }) }}</div>
   </div>
 </template>
 
@@ -79,6 +79,7 @@
 import { normalizeData, computeForecast } from "../shared/render.js";
 import { formatRelativeTime, formatCountdown, escapeHtml } from "../shared/format.js";
 import { diagnoseError } from "../shared/diagnose.js";
+import { t } from "../shared/i18n.js";
 
 export default {
   name: "SourceCard",
@@ -120,6 +121,7 @@ export default {
     },
   },
   methods: {
+    t,
     barClass(pct) {
       pct = pct || 0;
       if (pct >= 90) return "bar-danger";
@@ -135,8 +137,8 @@ export default {
     resetText(win) {
       if (!win.resetMs) return "\u00a0";
       const resetInMs = win.resetMs - this.now;
-      if (resetInMs <= 0) return "已重置";
-      return "重置倒计时 " + formatCountdown(resetInMs);
+      if (resetInMs <= 0) return t("card.reset");
+      return t("card.countdown", { time: formatCountdown(resetInMs) });
     },
   },
 };

@@ -79,7 +79,7 @@ async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
     } catch (e) {
       // AbortError 转成可读的超时错误，便于诊断归类
       if (e && e.name === "AbortError") {
-        throw new Error(`请求超时（${FETCH_TIMEOUT_MS / 1000}s）`);
+        throw new Error(`Request timeout (${FETCH_TIMEOUT_MS / 1000}s)`);
       }
       throw e;
     } finally {
@@ -222,7 +222,7 @@ async function fetchAndStore(inst) {
 
 async function fetchInstance(inst) {
   let tmpl = SOURCE_TEMPLATES[inst.type];
-  if (!tmpl) throw new Error(`未知数据源类型: ${inst.type}`);
+  if (!tmpl) throw new Error(`Unknown source type: ${inst.type}`);
 
   let cookieStr = "";
   let csrfToken = "";
@@ -243,7 +243,7 @@ async function fetchInstance(inst) {
         csrfToken = match ? match[1] : "";
       }
       if (!csrfToken) {
-        throw new Error(`curl 中未找到 ${tmpl.csrfCookieName} 或 X-Csrf-Token`);
+        throw new Error(`csrfToken not found in curl: ${tmpl.csrfCookieName} or X-Csrf-Token`);
       }
     }
 
@@ -329,12 +329,12 @@ async function fetchInstance(inst) {
         { headers: { accept: "*/*" } }
       );
       if (!tokenResp.ok) {
-        throw new Error(`Token 接口 HTTP ${tokenResp.status}`);
+        throw new Error(`Token endpoint HTTP ${tokenResp.status}`);
       }
       const tokenData = await tokenResp.json();
       authToken = tokenData[tmpl.tokenField] || "";
       if (!authToken) {
-        throw new Error(`无法从 ${tmpl.tokenEndpoint} 获取 accessToken，可能未登录`);
+        throw new Error(`Cannot get accessToken from ${tmpl.tokenEndpoint}, possibly not logged in`);
       }
     }
   }
@@ -429,7 +429,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === "testConnection") {
     const inst = msg.instance;
     if (!inst || !inst.id) {
-      sendResponse({ ok: false, diag: diagnoseError("未知数据源类型: (空)", { authMode: inst && inst.authMode }) });
+      sendResponse({ ok: false, diag: diagnoseError("Unknown source type: (empty)", { authMode: inst && inst.authMode }) });
       return false;
     }
     serializeFetch(() => fetchInstance(inst))

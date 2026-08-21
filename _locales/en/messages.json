@@ -1,0 +1,11 @@
+{
+  "extName": {
+    "message": "Coding Plan Quota Watcher"
+  },
+  "extDesc": {
+    "message": "Monitor usage and refresh times of multiple AI Coding Plans in one place"
+  },
+  "extTitle": {
+    "message": "Coding Plan Quota Monitor"
+  }
+}
