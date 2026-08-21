@@ -88,6 +88,11 @@ export default {
       toastMsg: "",
     };
   },
+  // toast 定时器句柄不进 data()（模板不依赖）；也别用 _ 前缀 ——
+  // Vue 2 不代理 data() 里 _ / $ 开头的属性，this._xxx 会是 undefined
+  created() {
+    this.toastTimer = null;
+  },
   async mounted() {
     document.title = t("doc.settingsTitle");
     document.documentElement.lang = getLocale();
@@ -268,8 +273,8 @@ export default {
     showToast(msg, duration = 2000) {
       this.toastMsg = msg;
       this.toastVisible = true;
-      clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(() => {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = setTimeout(() => {
         this.toastVisible = false;
       }, duration);
     },

@@ -56,10 +56,16 @@ export default {
       retryableIds: new Set(), // 转圈≥5s 的实例 id：显示「点击重试」链接
       timedOutIds: new Set(), // 转圈≥30s 判定超时的实例 id：停止转圈并提示失败
       now: Date.now(),
-      _tickTimer: null,
-      _retryTimers: {}, // { [instanceId]: timer }，5s 显示重试链接
-      _fallbackTimers: {}, // { [instanceId]: timer }，30s 超时失败
     };
+  },
+  // 定时器句柄是内部簿记，模板不依赖，不进 data()（免走响应式）。
+  // 且不能以 _ / $ 开头放 data()：Vue 2 不代理这类属性，this._xxx
+  // 永远是 undefined —— markRefreshing 曾因此抛错，首卡进了 loading
+  // 却没设上兜底定时器，永久转圈、全部刷新按钮永久不可点。
+  created() {
+    this.tickTimer = null;
+    this.retryTimers = {}; // { [instanceId]: timer }，5s 显示重试链接
+    this.fallbackTimers = {}; // { [instanceId]: timer }，30s 超时失败
   },
   computed: {
     enabledInstances() {
@@ -78,7 +84,7 @@ export default {
     // 监听 storage 变化
     chrome.storage.onChanged.addListener(this.onStorageChanged);
     // 每 15 秒刷新相对时间（now 变化触发倒计时重算）
-    this._tickTimer = setInterval(() => {
+    this.tickTimer = setInterval(() => {
       this.now = Date.now();
     }, 15000);
     // 进入 dashboard 立即刷新一次（从 settings 改完配置回来能马上看到最新数据）
@@ -87,8 +93,8 @@ export default {
   },
   beforeDestroy() {
     chrome.storage.onChanged.removeListener(this.onStorageChanged);
-    if (this._tickTimer) clearInterval(this._tickTimer);
-    for (const map of [this._retryTimers, this._fallbackTimers]) {
+    if (this.tickTimer) clearInterval(this.tickTimer);
+    for (const map of [this.retryTimers, this.fallbackTimers]) {
       for (const id of Object.keys(map)) clearTimeout(map[id]);
     }
   },
@@ -160,7 +166,7 @@ export default {
       this.refreshingIds = newSet;
       this.refreshStartTimes = { ...this.refreshStartTimes, [id]: Date.now() };
       // 清掉上一次的定时器与超时/重试标记，重新计时
-      this._clearCardTimers(id);
+      this.clearCardTimers(id);
       const rt = new Set(this.retryableIds);
       rt.delete(id);
       this.retryableIds = rt;
@@ -168,13 +174,13 @@ export default {
       to.delete(id);
       this.timedOutIds = to;
       // 5s 后显示「点击重试」链接
-      this._retryTimers[id] = setTimeout(() => this.markRetryable(id), RETRY_SHOW_MS);
+      this.retryTimers[id] = setTimeout(() => this.markRetryable(id), RETRY_SHOW_MS);
       // 30s 判定超时失败（background 卡死/无响应时兜底，防止永久卡住）
-      this._fallbackTimers[id] = setTimeout(() => this.markTimedOut(id), LOADING_FALLBACK_TIMEOUT_MS);
+      this.fallbackTimers[id] = setTimeout(() => this.markTimedOut(id), LOADING_FALLBACK_TIMEOUT_MS);
     },
-    _clearCardTimers(id) {
-      if (this._retryTimers[id]) { clearTimeout(this._retryTimers[id]); delete this._retryTimers[id]; }
-      if (this._fallbackTimers[id]) { clearTimeout(this._fallbackTimers[id]); delete this._fallbackTimers[id]; }
+    clearCardTimers(id) {
+      if (this.retryTimers[id]) { clearTimeout(this.retryTimers[id]); delete this.retryTimers[id]; }
+      if (this.fallbackTimers[id]) { clearTimeout(this.fallbackTimers[id]); delete this.fallbackTimers[id]; }
     },
     // 转圈≥5s：让该卡显示可点击的重试链接（仍保持转圈）
     markRetryable(id) {
@@ -185,7 +191,7 @@ export default {
     },
     // 转圈≥30s：停止转圈并标记为超时失败
     markTimedOut(id) {
-      this._clearCardTimers(id);
+      this.clearCardTimers(id);
       const rs = new Set(this.refreshingIds);
       rs.delete(id);
       this.refreshingIds = rs;
@@ -201,7 +207,7 @@ export default {
     },
     // 标记某实例完成：清 loading，但保证手动刷新至少展示 500ms
     markDone(id) {
-      this._clearCardTimers(id);
+      this.clearCardTimers(id);
       const rt = new Set(this.retryableIds);
       rt.delete(id);
       this.retryableIds = rt;
