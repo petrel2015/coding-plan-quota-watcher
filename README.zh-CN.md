@@ -16,6 +16,22 @@
 
 > **💡 核心目标：所有编码套餐用量集中在一个面板，一眼看清"还剩多少、何时重置"。**
 
+## 界面截图
+
+> 截图为演示数据（UI 支持中/英切换，详见设置页语言选项）。
+
+**Dashboard（亮色主题）**——多平台用量聚合、三色预警进度条、重置倒计时、消耗速度预测：
+
+![Dashboard - Light](docs/dashboard-light.png)
+
+**Dashboard（暗色主题）**：
+
+![Dashboard - Dark](docs/dashboard-dark.png)
+
+**设置页**——数据源管理与鉴权配置（本地 Cookie / 手动 cURL）、列数 / 主题 / 语言设置：
+
+![Settings](docs/settings-light.png)
+
 ---
 
 ## 支持的数据源

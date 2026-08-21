@@ -16,6 +16,22 @@ A Chrome browser extension (Manifest V3) that **monitors the usage quota of mult
 
 > **💡 Core Goal: All your Coding Plan quotas in one panel — know how much is left and when it resets, at a glance.**
 
+## Screenshots
+
+> Screenshots show demo data with the Chinese UI (the extension also supports English — toggle it in Settings).
+
+**Dashboard (light theme)** — multi-platform usage aggregation, 3-level warning progress bars, reset countdown, and burn-rate prediction:
+
+![Dashboard - Light](docs/dashboard-light.png)
+
+**Dashboard (dark theme)**:
+
+![Dashboard - Dark](docs/dashboard-dark.png)
+
+**Settings** — data source management with auth mode (local cookie / manual cURL), plus column / theme / language preferences:
+
+![Settings](docs/settings-light.png)
+
 ---
 
 ## Supported Data Sources
