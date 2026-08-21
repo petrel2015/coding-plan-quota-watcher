@@ -3,7 +3,10 @@
     <!-- topbar -->
     <div class="topbar">
       <h1>{{ t('settings.title') }}</h1>
-      <el-button @click="goBack">{{ t('settings.back') }}</el-button>
+      <div class="topbar-right">
+        <el-button @click="toggleLocale">{{ nextLangLabel }}</el-button>
+        <el-button @click="goBack">{{ t('settings.back') }}</el-button>
+      </div>
     </div>
 
     <div class="content">
@@ -107,6 +110,12 @@ export default {
     document.documentElement.lang = getLocale();
     await applyTheme();
     await this.loadAll();
+  },
+  computed: {
+    // 右上角快捷切换按钮显示「目标语言」：中文界面显示 EN，英文界面显示 中文
+    nextLangLabel() {
+      return getLocale() === "zh" ? "EN" : "中文";
+    },
   },
   methods: {
     t,
@@ -284,6 +293,11 @@ export default {
       await chrome.storage.local.set({ locale: val });
       location.reload();
     },
+    // 右上角中/英快捷切换：写入显式语言（覆盖「跟随浏览器」），重载生效
+    async toggleLocale() {
+      await chrome.storage.local.set({ locale: getLocale() === "zh" ? "en" : "zh" });
+      location.reload();
+    },
     goBack() {
       window.location.href = "dashboard.html";
     },
@@ -315,6 +329,11 @@ export default {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .content {
   max-width: 720px;

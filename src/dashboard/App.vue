@@ -6,6 +6,7 @@
       <div class="topbar-right">
         <el-button @click="goSettings">{{ t('dashboard.settings') }}</el-button>
         <el-button type="primary" :loading="refreshingAll" @click="refreshAll(false)">{{ t('dashboard.refreshAll') }}</el-button>
+        <el-button @click="toggleLocale">{{ nextLangLabel }}</el-button>
       </div>
     </div>
 
@@ -77,6 +78,10 @@ export default {
     // 「全部刷新」按钮 loading：有任何卡在转就 loading
     refreshingAll() {
       return this.refreshingIds.size > 0;
+    },
+    // 右上角快捷切换按钮显示「目标语言」：中文界面显示 EN，英文界面显示 中文
+    nextLangLabel() {
+      return getLocale() === "zh" ? "EN" : "中文";
     },
   },
   async mounted() {
@@ -300,6 +305,11 @@ export default {
     },
     goSettings() {
       window.location.href = "settings.html";
+    },
+    // 右上角中/英快捷切换：写入显式语言（覆盖「跟随浏览器」），重载生效
+    async toggleLocale() {
+      await chrome.storage.local.set({ locale: getLocale() === "zh" ? "en" : "zh" });
+      location.reload();
     },
   },
 };
