@@ -7,8 +7,14 @@ import { diagnoseError } from "../shared/diagnose.js";
 
 const ALARM_NAME = "quota-refresh";
 const REFRESH_INTERVAL_MINUTES = 5;
-// 单次请求超时：防止某请求挂起导致整条串行刷新链卡死、卡片永远转圈
+// 单次请求超时：覆盖发起到响应体读取完成的全程，
+// 防止某请求挂起导致刷新链卡死、卡片永远转圈
 const FETCH_TIMEOUT_MS = 20000;
+// codex-reset.com 重置预测是锦上添花的数据，单独用更短的超时
+const FORECAST_TIMEOUT_MS = 10000;
+// 整轮刷新看门狗：即使个别请求因未知原因挂起，也保证 _refreshing 复位，
+// 否则防重入守卫会把后续所有刷新静默跳过（表现为卡片永远「暂无数据」+转圈）
+const REFRESH_ALL_TIMEOUT_MS = 120000;
 
 // ------------------------------------------------------------
 // DNR（declarativeNetRequest）助手
@@ -34,12 +40,54 @@ function allocRuleId() {
 }
 
 /**
+ * 带整体超时的 fetch：从发起到响应体读取完成全程受控。
+ * 只保护到响应头是不够的——服务器发出头部后挂起 body 时，
+ * resp.json()/resp.text() 会永久 pending，卡死整条刷新链。
+ * 返回 Response 的薄包装（ok/status 同名，json()/text() 读取完成才停表）。
+ */
+async function fetchWithTimeout(url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const asTimeoutError = (e) =>
+    timedOut || (e && e.name === "AbortError")
+      ? new Error(`Request timeout (${timeoutMs / 1000}s)`)
+      : e;
+
+  let resp;
+  try {
+    resp = await fetch(url, { ...opts, cache: "no-store", signal: controller.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    throw asTimeoutError(e);
+  }
+  const readWithTimeout = (read) => async () => {
+    try {
+      return await read();
+    } catch (e) {
+      throw asTimeoutError(e);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  return {
+    ok: resp.ok,
+    status: resp.status,
+    json: readWithTimeout(() => resp.json()),
+    text: readWithTimeout(() => resp.text()),
+  };
+}
+
+/**
  * 用 DNR 临时注入 Cookie 发起一次请求，结束后自动清理规则。
- * 串联在 serializeFetch 锁内调用，确保同一时间只有一个活跃规则。
+ * 请求本体（含超时保护）委托给 fetchWithTimeout。
  * @param {string} url        目标 URL（不含 _qwid）
  * @param {string} cookieStr  要注入的 Cookie 值
  * @param {object} fetchOpts  传给 fetch 的选项（method/headers/body 等）
- * @returns {Promise<Response>}
+ * @returns {Promise<{ok, status, json(), text()}>}
  */
 async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
   const ruleId = allocRuleId();
@@ -66,25 +114,7 @@ async function fetchWithDnrCookie(url, cookieStr, fetchOpts) {
   });
 
   try {
-    // 超时保护：某请求挂起（网络半开/服务器不响应）时主动 abort，
-    // 否则会卡住整条串行刷新链，导致卡片永远转圈。
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      return await fetch(bustUrl.toString(), {
-        ...fetchOpts,
-        cache: "no-store",
-        signal: controller.signal,
-      });
-    } catch (e) {
-      // AbortError 转成可读的超时错误，便于诊断归类
-      if (e && e.name === "AbortError") {
-        throw new Error(`Request timeout (${FETCH_TIMEOUT_MS / 1000}s)`);
-      }
-      throw e;
-    } finally {
-      clearTimeout(timer);
-    }
+    return await fetchWithTimeout(bustUrl.toString(), fetchOpts);
   } finally {
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: [ruleId],
@@ -145,7 +175,14 @@ async function refreshAll() {
   try {
     const instances = await getInstances();
     // 并发刷新全部实例（各实例写独立的 data_<id> key，互不冲突）
-    await Promise.all(instances.map((inst) => fetchAndStore(inst)));
+    // 看门狗兜底：单请求超时已覆盖正常路径，这里再保一层 _refreshing 一定复位
+    let watchdog;
+    await Promise.race([
+      Promise.all(instances.map((inst) => fetchAndStore(inst))),
+      new Promise((resolve) => {
+        watchdog = setTimeout(resolve, REFRESH_ALL_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(watchdog));
   } finally {
     _refreshing = false;
   }
@@ -363,9 +400,10 @@ async function fetchInstance(inst) {
   // chatgpt-codex: 额外获取 codex-reset.com 重置预测（公开 API，无需鉴权）
   if (inst.type === "chatgpt-codex") {
     try {
-      const forecastResp = await fetch(
+      const forecastResp = await fetchWithTimeout(
         "https://codex-reset.com/api/forecast?tz=Asia%2FShanghai&locale=zh",
-        { headers: { accept: "application/json", referer: "https://codex-reset.com/zh/" } }
+        { headers: { accept: "application/json", referer: "https://codex-reset.com/zh/" } },
+        FORECAST_TIMEOUT_MS
       );
       if (forecastResp.ok) {
         result._resetForecast = await forecastResp.json();
